@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser()
 
 # cpu vs gpu
 parser.add_argument("--device", type=str, default="cuda:0", help="which device to run on")
-parser.add_argument("--num-workers", type=int, default=16, help="number of cpu workers in iterator")
+parser.add_argument("--num-workers", type=int, default=8, help="number of cpu workers in iterator")
 
 # data params
 parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "mnist"], help="dataset")
@@ -24,11 +24,11 @@ parser.add_argument("--noise-std", type=str, default="10", help="Standard deviat
 parser.add_argument('--reweight',action='store_true',help='reweight action diff and egrad using variance values')
 
 # Loss params
-parser.add_argument('-distance-metric', default='l2', type=str, choices = ['l2','ned'],help='l2 distance vs normalized euclidean distance')
+parser.add_argument('--distance-metric', default='l2', type=str, choices = ['l2','ned'],help='l2 distance vs normalized euclidean distance')
 
 # training params
 parser.add_argument("--batch-size", type=int, default=64, help="number of images per minibatch")
-parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
 # parser.add_argument("--grad-clip", type=float, default=0.5, help="gradient clip")
 # parser.add_argument("--weight-decay", type=float, default=1e-5, help="weight decay for training")
 parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
@@ -39,11 +39,11 @@ parser.add_argument("--optimizer", type=str, default='sgd', choices=['sgd','sgd_
 parser.add_argument("--sampling-batch-size", type=int, default=1, help="number of images per minibatch")
 parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin'], help="sampling strategy")
 parser.add_argument('--init-value', type=str, default='uniform', choices=['zeros','orig','random','uniform'],help='where to start during sampling')
-parser.add_argument('--init-noise', type=float, default=10, help='initial noise level to start from during sampling')
+# parser.add_argument('--init-noise', type=float, default=10, help='initial noise level to start from during sampling')
 parser.add_argument('--step-lr', default=0.1, help='provide a list to use a mixture of learning rates')
 parser.add_argument('--step-fgrad', type=float, default=1e-4, help='final grad to stop at')
 parser.add_argument('--max-step', type=int, default=250, help='maximum no of steps for MCMC sampling')
-parser.add_argument('--step-grad-choice', type=str, default='rgrad', choices=['rgrad','pgrad','mgrad','agrad'], help='step using predicted gradient vs real gradient vs equal combination vs annealed combination (0.25 tgrad 0.5 annealed prob mixture 0.25 pgrad)')
+# parser.add_argument('--step-grad-choice', type=str, default='rgrad', choices=['rgrad','pgrad','mgrad','agrad'], help='step using predicted gradient vs real gradient vs equal combination vs annealed combination (0.25 tgrad 0.5 annealed prob mixture 0.25 pgrad)')
 parser.add_argument('--lr-anneal-strategy', type=str, default='const', choices=['const','istep'], help='constantly anneal vs anneal wrt steps taken)')
 parser.add_argument('--lr-anneal', type=float, default=1.0, help='anneal constant to multiply at each step')
 

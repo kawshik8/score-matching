@@ -24,6 +24,7 @@ class Trainer(object):
             self.model = UNet()
         elif args.model_objective == 'energy':
             self.model = Encoder()
+
         self.model.to(self.args.device)
         
         if args.dataset == 'cifar10':
@@ -89,7 +90,7 @@ class Trainer(object):
 
                 noisy_batch = batch + noise 
 
-                image_diff = (noisy_batch + batch)
+                image_diff = (noisy_batch - batch)
 
                 if self.args.reweight:
                     image_diff = image_diff / (noise_level**2)
@@ -162,8 +163,8 @@ class Trainer(object):
                 torch.save(self.optimizer.state_dict(), self.args.model_dir + "epoch_optimizer.ckpt")
 
 
-        # test_loss = self.train_test('eval', 'test', 0)
-        # self.log.info("Test Loss: " + str(test_loss))
+        test_loss = self.train_test('eval', 'test', 0)
+        self.log.info("Test Loss: " + str(test_loss))
 
     def sampling(self, split):
 
@@ -185,7 +186,7 @@ class Trainer(object):
 
             prev_batch = curr_batch.clone() + 100
 
-            while torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and ((curr_batch - prev_batch)**2).mean() > 1e-4: #step <= self.args.max_step:
+            while ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
             
 
                 if self.args.model_objective == 'score':
@@ -219,7 +220,7 @@ if __name__ == '__main__':
     args = process_args()
     trainer = Trainer(args)
     trainer.training()
-    trainer.sampling('test')
+    # trainer.sampling('test')
 
 
 
