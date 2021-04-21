@@ -27,10 +27,10 @@ class Trainer(object):
 
         self.model.to(self.args.device)
         
-        if args.dataset == 'cifar10':
-            self.train_data = cifar10(args, 'train')
-            self.val_data = cifar10(args, 'val')
-            self.test_data = cifar10(args, 'test')
+        # if args.dataset == 'cifar10':
+        self.train_data = Data(args, 'train')
+        self.val_data = Data(args, 'valid')
+        self.test_data = Data(args, 'test')
 
         self.train_loader = DataLoader(self.train_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
         self.val_loader = DataLoader(self.val_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
@@ -55,7 +55,7 @@ class Trainer(object):
     def get_loader(self, split):
         if split == 'train':
             data_loader = self.train_loader
-        elif split == 'val':
+        elif split == 'valid':
             data_loader = self.val_loader
         else:
             data_loader = self.test_loader
@@ -66,7 +66,7 @@ class Trainer(object):
         """
         Train the model
         """
-        assert split in {'train','val','test'}
+        assert split in {'train','valid','test'}
         assert what  in {'train','eval'}
 
         if what == 'train':
@@ -109,7 +109,10 @@ class Trainer(object):
 
                 self.writer.add_scalar(what + "_" + split + '-set/energy_gradient_l2norm_batch_noise-' + str(noise_level), torch.norm(energy_gradient,dim=1).mean(), step)
 
-                loss = (energy_gradient - image_diff)**2
+                if self.args.reweight:
+                    energy_gradient = energy_gradient/noise_level
+
+                loss = 0.5*((energy_gradient - image_diff)**2)
                 loss = torch.mean(loss)  
 
                 self.writer.add_scalar(what + "_" + split + '-set/loss_batch_noise-' + str(noise_level), loss, step)  
@@ -142,7 +145,7 @@ class Trainer(object):
             train_loss = self.train_test('train', 'train', epoch)
             self.writer.add_scalar('train_train-set/epoch_loss', train_loss, epoch)
 
-            eval_loss = self.train_test('eval', 'val', epoch)
+            eval_loss = self.train_test('eval', 'valid', epoch)
             self.writer.add_scalar('eval_val-set/epoch_loss', train_loss, epoch)
 
             self.log.info("\t\tTrain Loss: " + str(train_loss) + "\n\t\tVal Loss: " + str(eval_loss))
@@ -168,7 +171,7 @@ class Trainer(object):
 
     def sampling(self, split):
 
-        assert split in {'train','val','test'}
+        assert split in {'train','valid','test'}
 
         self.model.eval()
 
