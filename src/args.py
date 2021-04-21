@@ -33,7 +33,7 @@ parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
 # parser.add_argument("--weight-decay", type=float, default=1e-5, help="weight decay for training")
 parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
 parser.add_argument("--early-stop-patience", type=int, default=10, help="number of epochs to wait for val loss to decrease before training stops early")
-parser.add_argument("--optimizer", type=str, default='sgd', choices=['sgd','sgd_mom','adam'], help="optimization strategy")
+parser.add_argument("--optimizer", type=str, default='adam', choices=['sgd','sgd_mom','adam'], help="optimization strategy")
 
 # Sampling options
 parser.add_argument("--sampling-batch-size", type=int, default=1, help="number of images per minibatch")
@@ -63,7 +63,8 @@ def process_args():
     if not os.path.exists(args.model_dir):
         os.mkdir(args.model_dir)
 
-    args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
+    if args.mfile is None:
+        args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
     args.model_dir += args.mfile + "/"
 
     if not os.path.exists(args.model_dir):
