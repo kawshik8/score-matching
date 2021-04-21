@@ -9,6 +9,23 @@ import math
 import logging as log
 import torchvision.models.resnet as resnet
 
+class Conv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, transpose = False):
+        super(Conv, self).__init__()
+        if transpose:
+            self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding)
+        else:
+            self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.act = nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.act(x)
+
+        return x
+
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
 
@@ -19,12 +36,8 @@ class DoubleConv(nn.Module):
             mid_channels = out_channels
 
         self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            Conv(in_channels, mid_channels, kernel_size=3, padding=1),
+            Conv(mid_channels, out_channels, kernel_size=3, padding=1)
         )
 
     def forward(self, x):
@@ -34,21 +47,26 @@ class DoubleConv(nn.Module):
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, maxpool=True):
         super().__init__()
-        self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
-            DoubleConv(in_channels, out_channels)
-        )
+        if maxpool:
+            self.pool = nn.MaxPool2d(2)
+        else:
+            self.pool = Conv(in_channels, out_channels, kernel_size = 2, stride = 2)
+
+        self.conv = DoubleConv(in_channels if maxpool else out_channels, out_channels)
 
     def forward(self, x):
-        return self.maxpool_conv(x)
+        x = self.pool(x)
+        x = self.conv(x)
+
+        return x
 
 
 class Up(nn.Module):
     """Upscaling then double conv"""
 
-    def __init__(self, in_channels, out_channels, bilinear=True):
+    def __init__(self, in_channels, out_channels, bilinear=False):
         super().__init__()
 
         # if bilinear, use the normal convolutions to reduce the number of channels
@@ -56,7 +74,7 @@ class Up(nn.Module):
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
             self.conv = DoubleConv(in_channels + in_channels // 2, out_channels, in_channels // 2)
         else:
-            self.up = nn.ConvTranspose2d(in_channels , in_channels // 2, kernel_size=2, stride=2)
+            self.up = Conv(in_channels , in_channels // 2, kernel_size=2, stride=2, transpose=True)
             self.conv = DoubleConv(in_channels, out_channels)
 
 
@@ -65,6 +83,7 @@ class Up(nn.Module):
 
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
+
 
 
 class OutConv(nn.Module):
@@ -76,7 +95,7 @@ class OutConv(nn.Module):
         return self.conv(x)
 
 class UNet(nn.Module):
-    def __init__(self, n_channels=3, bilinear=False, depth = 3, init_channels = 64, factor = 2):
+    def __init__(self, n_channels=3, depth = 3, bilinear=False, init_channels = 64, factor = 2):
         super(UNet, self).__init__()
         self.n_channels = n_channels
         self.bilinear = bilinear
@@ -90,8 +109,8 @@ class UNet(nn.Module):
                 self.down_block.append(DoubleConv(n_channels, init_channels))
                 self.up_block.append(OutConv(init_channels, n_channels))
             else:
-                self.down_block.append(Down(init_channels, init_channels * 2))
-                self.up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear)]).extend(self.up_block)
+                self.down_block.append(Down(init_channels, init_channels * 2, maxpool=bilinear))
+                self.up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear)]).extend(self.up_block)
                 init_channels = init_channels*2
 
 
@@ -128,12 +147,12 @@ class Encoder(nn.Module):
             if d==0:
                 self.down_block.append(DoubleConv(n_channels, init_channels))
             else:
-                self.down_block.append(Down(init_channels, init_channels * 2))
+                self.down_block.append(Down(init_channels, init_channels * 2, maxpool=bilinear))
                 init_channels = init_channels*2
 
         self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
 
-        self.dropout = torch.nn.Dropout(p=0.5, inplace=True)
+        self.dropout = torch.nn.Dropout(p=0.5)
         self.linear = nn.Linear(init_channels, 128)
         self.out = nn.Linear(128, 1)
 
@@ -157,9 +176,11 @@ class Encoder(nn.Module):
 
 if __name__ == "__main__":
     model = UNet(3, 3)
+    print(model)
     print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
 
     model = Encoder(3)
+    print(model)
     print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
     # print(model)
     

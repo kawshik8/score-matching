@@ -17,28 +17,45 @@ transform = torchvision.transforms.ToTensor()
 random.seed(42)
 np.random.seed(42)
 
-class cifar10(Dataset):
+class Data(Dataset):
     def __init__(self, args, split):
         
         assert split in {'train','val','test'}
 
+        self.get_data(args.dataset) 
+
         if split == 'train':
-            train_data = datasets.CIFAR10(root=args.data_dir, train=True,  download=True)
+            if args.dataset != 'celeba':
+                train_data = self.dataset(root=args.data_dir, train=True,  download=True)
+            else:
+                train_data = self.dataset(root=args.data_dir, split=split,  download=True)
+
             self.images = train_data
 
         else:
-            cifar10_test  = datasets.CIFAR10(root=args.data_dir, train=False, download=True)
-            full_size = len(cifar10_test)
-            val_size = int(full_size * 0.5)
-            test_size = int(full_size * 0.5) + val_size
+            if args.dataset != 'celeba':
+                val_test  = self.dataset(root=args.data_dir, train=False, download=True)
+            else:
+                val_test = self.dataset(root=args.data_dir, split=split, download=True)
+
+            full_size = len(val_test)
+            test_size = val_size = int(full_size * 0.5)
             full_idx = np.random.permutation(full_size).tolist()
             splits = {"val": full_idx[:val_size], "test": full_idx[val_size:]}
 
-            data = [cifar10_test[idx] for idx in splits[split]]
+            data = [val_test[idx] for idx in splits[split]]
 
             self.images = data
 
         self.transforms = transforms.Compose([transforms.ToTensor()])        
+
+    def get_data(self, dataset_name):
+        if dataset_name == 'cifar10':
+            self.dataset = datasets.CIFAR10
+        elif dataset_name == 'celeba':
+            self.dataset = datasets.CelebA
+        elif dataset_name == 'mnist':
+            self.dataset = datasets.MNIST
 
     def __len__(self):
         return len(self.images)
@@ -54,7 +71,7 @@ class cifar10(Dataset):
            
 if __name__ == '__main__':
     args = process_args()
-    images = cifar10(args,'train')
+    images = Data(args,'train')
     loader = DataLoader(images, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     for i,batch in enumerate(loader):
         print(i,batch.shape)

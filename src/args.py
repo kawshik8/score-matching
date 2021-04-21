@@ -10,7 +10,7 @@ parser.add_argument("--device", type=str, default="cuda:0", help="which device t
 parser.add_argument("--num-workers", type=int, default=8, help="number of cpu workers in iterator")
 
 # data params
-parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "mnist"], help="dataset")
+parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "mnist","celeba"], help="dataset")
 parser.add_argument("--data-dir", type=str, default="../../data/", help="directory to access data")
 
 # model params
@@ -21,7 +21,7 @@ parser.add_argument("--unet-depth", type=str, default=5, help="depth of unet mod
 
 # noise params
 parser.add_argument("--noise-std", type=str, default="10", help="Standard deviation of noise (Give multiple noise levels separated by commas)")
-parser.add_argument('--reweight',action='store_true',help='reweight action diff and egrad using variance values')
+parser.add_argument('--reweight',type=int,default=1, help='reweight action diff and egrad using variance values')
 
 # Loss params
 parser.add_argument('--distance-metric', default='l2', type=str, choices = ['l2','ned'],help='l2 distance vs normalized euclidean distance')
@@ -56,7 +56,12 @@ def process_args():
     # TODO: some asserts, check the arguments
     args = parser.parse_args()
 
+    args.reweight = True if args.reweight==1 else False
+
     args.device = torch.device(args.device)
+
+    if not os.path.exists(args.model_dir):
+        os.mkdir(args.model_dir)
 
     args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
     args.model_dir += args.mfile + "/"
