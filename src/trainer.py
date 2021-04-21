@@ -3,6 +3,7 @@ import torch
 import math
 import logging as log
 import os
+from tqdm import tqdm
 import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -77,10 +78,11 @@ class Trainer(object):
         data_loader = self.get_loader(split)
         total_losses = []
 
-        for i, batch in enumerate(data_loader):
-            print(i,batch.shape)
-            if i > 5:
-                break
+        with tqdm(total=len(data_loader.dataset)) as progress:
+          for i, batch in enumerate(data_loader):
+#            print(i,batch.shape)
+#            if i > 5:
+#                break
             step = epoch * len(data_loader) + i
             batch = batch.to(self.args.device)
 
@@ -119,10 +121,15 @@ class Trainer(object):
 
                 all_losses.append(loss)
 
-                print(i, loss, torch.norm(energy_gradient,dim=1).mean(), torch.norm(image_diff,dim=1).mean())
+            #    if i%200 == 0:
+            #        self.log.info("ministep: " + str(i) + " noise std: " + str(noise_level) + " Loss: " + str(loss.item()) + " energy grad norm: " + str(torch.norm(energy_gradient,dim=1).mean().item()) + " image diff norm: " + str(torch.norm(image_diff,dim=1).mean().item()))
+ #               print(i, loss, torch.norm(energy_gradient,dim=1).mean(), torch.norm(image_diff,dim=1).mean())
 
             loss = torch.stack(all_losses).mean().to(self.args.device)
             self.writer.add_scalar(what + "_" + split + '-set/total_loss_batch', loss, step)
+
+            #if i%200==0:
+            #    self.log.info("total loss: " + str(loss.item()))
 
             if what == 'train':
                 self.optimizer.zero_grad()
@@ -130,6 +137,8 @@ class Trainer(object):
                 self.optimizer.step()
 
             total_losses.append(loss.detach().cpu().numpy())
+            progress.update(len(batch))
+            progress.set_postfix(loss=loss.item(),noise_loss=[x.item() for x in all_losses])
 
         return np.mean(total_losses)    
 
@@ -207,7 +216,7 @@ class Trainer(object):
                 prev_batch = curr_batch.clone()
 
                 if self.args.sampling_strategy == 'vanilla':
-                    print("vanilla")
+#                    print("vanilla")
                     curr_batch = curr_batch + self.args.step_lr * energy_gradient
                 elif self.args.sampling_strategy == 'langevin':
                     curr_batch = curr_batch + (self.args.step_lr/2) * energy_gradient + (self.args.step_lr**0.5)*torch.normal(mean=0,std=1,size=energy_gradient.size())

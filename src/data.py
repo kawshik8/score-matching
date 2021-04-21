@@ -20,7 +20,7 @@ np.random.seed(42)
 class Data(Dataset):
     def __init__(self, args, split):
         
-        assert split in {'train','val','test'}
+        assert split in {'train','valid','test'}
 
         self.get_data(args.dataset) 
 
@@ -41,7 +41,7 @@ class Data(Dataset):
             full_size = len(val_test)
             test_size = val_size = int(full_size * 0.5)
             full_idx = np.random.permutation(full_size).tolist()
-            splits = {"val": full_idx[:val_size], "test": full_idx[val_size:]}
+            splits = {"valid": full_idx[:val_size], "test": full_idx[val_size:]}
 
             data = [val_test[idx] for idx in splits[split]]
 
