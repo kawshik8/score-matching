@@ -114,7 +114,7 @@ class Trainer(object):
                 if self.args.reweight:
                     energy_gradient = energy_gradient/noise_level
 
-                loss = 0.5*((energy_gradient - image_diff)**2)
+                loss = 0.5*((energy_gradient + image_diff)**2)
                 loss = torch.mean(loss)  
 
                 self.writer.add_scalar(what + "_" + split + '-set/loss_batch_noise-' + str(noise_level), loss, step)  
@@ -147,6 +147,7 @@ class Trainer(object):
 
         best_loss = None
         patient_steps = 0
+
         for epoch in range(self.args.n_epochs):
             
             self.log.info("\nepoch: " + str(epoch))
@@ -177,6 +178,19 @@ class Trainer(object):
 
         test_loss = self.train_test('eval', 'test', 0)
         self.log.info("Test Loss: " + str(test_loss))
+
+    def testing(self):
+
+        if args.load_mdir is None:
+            print("load model directory is None")
+            exit(0)
+            
+        self.model.load_state_dict(torch.load(args.load_mdir))
+
+        test_loss = self.train_test('eval', args.test_split, 0)
+        self.log.info("Test Loss: " + str(test_loss))
+
+        self.sampling(args.test_split)
 
     def sampling(self, split):
 
@@ -231,7 +245,10 @@ class Trainer(object):
 if __name__ == '__main__':
     args = process_args()
     trainer = Trainer(args)
-    trainer.training()
+    if not args.test_model:
+        trainer.training()
+    else:
+        trainer.testing()
     # trainer.sampling('test')
 
 
