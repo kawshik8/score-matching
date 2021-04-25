@@ -26,12 +26,14 @@ class Trainer(object):
         elif args.model_objective == 'energy':
             self.model = Encoder()
 
+        self.inception = Inception(args.fid_layer).eval()
         self.model.to(self.args.device)
         
         # if args.dataset == 'cifar10':
         self.train_data = Data(args, 'train')
         self.val_data = Data(args, 'valid')
         self.test_data = Data(args, 'test')
+        self.data = {"train": self.train_data, "valid":self.val_data, "test":self.test_data}
 
         self.train_loader = DataLoader(self.train_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
         self.val_loader = DataLoader(self.val_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
@@ -51,6 +53,49 @@ class Trainer(object):
 
         tensorboard_log_dir = os.path.join(args.model_dir, 'tensorboard/tb_log.info')
         self.writer = SummaryWriter(log_dir=tensorboard_log_dir)
+
+        fname = args.dataset + "_stats_" + str(args.fid_layer) + ".npz"
+        if os.path.exists(fname):
+            f = open(fname,'rb')
+            fid_stats = np.load(f)
+            self.fid_mean = fid_stats['mean']
+            self.fid_covar = fid_stats['covar']
+            print(self.fid_mean.shape,self.fid_covar.shape)
+        else:
+            self.fid_mean, self.fid_covar = self.get_representative_stats('valid')
+            f = open(fname,'wb+')
+            np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
+            print(self.fid_mean.shape,self.fid_covar.shape)
+            
+            
+
+
+    def get_representative_stats(self,split):
+        
+        self.inception.to(self.args.device)
+        means = []
+        covars = []
+        acts = []
+        up = torch.nn.Upsample(size=(299, 299), mode='bilinear')
+        for i,batch in enumerate(self.get_loader(split)):
+            batch = batch.to(self.args.device)
+            batch = (batch - torch.min(batch,dim=0)[0])/(torch.max(batch,dim=0)[0] - torch.min(batch,dim=0)[0])
+            batch = (batch * 2) - 1
+            # if i%10==0:
+            #     print(i)
+            # if i>100:
+            #     break
+            batch = up(batch)
+            fid_act,_ = self.inception(batch)
+            acts.append(fid_act.detach().cpu())
+
+        act = torch.cat(acts).numpy()
+
+        mean = np.mean(act,axis=0)
+        covar = np.cov(act,rowvar=False)
+        
+        # all_fid = torch.stack(all_fid).mean()
+        return mean,covar
 
 
     def get_loader(self, split):
@@ -95,7 +140,10 @@ class Trainer(object):
                 image_diff = (noisy_batch - batch)
 
                 if self.args.reweight:
-                    image_diff = image_diff / (noise_level**2)
+                    if len(self.args.noise_std) > 1:
+                        image_diff = image_diff / noise_level
+                    else:
+                        image_diff = image_diff / (noise_level**2)
 
                 if self.args.model_objective == 'score':
                     energy_gradient = self.model(noisy_batch)                        
@@ -112,7 +160,8 @@ class Trainer(object):
                 self.writer.add_scalar(what + "_" + split + '-set/energy_gradient_l2norm_batch_noise-' + str(noise_level), torch.norm(energy_gradient,dim=1).mean(), step)
 
                 if self.args.reweight:
-                    energy_gradient = energy_gradient/noise_level
+                    if len(self.args.noise_std) == 1:
+                        energy_gradient = energy_gradient/noise_level
 
                 loss = 0.5*((energy_gradient + image_diff)**2)
                 loss = torch.mean(loss)  
@@ -147,6 +196,9 @@ class Trainer(object):
 
         best_loss = None
         patient_steps = 0
+        if args.model_selection == 'sampling':
+            best_fid = None
+            best_iscore = None
 
         for epoch in range(self.args.n_epochs):
             
@@ -160,9 +212,25 @@ class Trainer(object):
 
             self.log.info("\t\tTrain Loss: " + str(train_loss) + "\n\t\tVal Loss: " + str(eval_loss))
 
+            if args.model_selection == 'sampling':
+                iscore, fid = self.sampling('valid',args.selection_num_samples)
+
+                if best_iscore is None or best_iscore > iscore:
+                    best_metric = iscore
+                    self.log.info("Best model found at epoch " + str(epoch) + " with eval inception score " + str(best_iscore))
+                    torch.save(self.model.state_dict(), self.args.model_dir + "best_iscore.ckpt")
+                
+                if best_fid is None or best_fid < fid:
+                    best_fid = fid
+                    self.log.info("Best model found at epoch " + str(epoch) + " with eval fid score " + str(best_fid))
+                    torch.save(self.model.state_dict(), self.args.model_dir + "best_fid.ckpt")
+
+                self.log.info("\t\tInception Score: " + str(iscore) + "\n\t\tFid Score: " + str(fid))
+           
+
             if best_loss is None or eval_loss < best_loss:
                 best_loss = eval_loss
-                self.log.info("Better model found at epoch " + str(epoch) + " with eval loss " + str(best_loss))
+                self.log.info("Best model found at epoch " + str(epoch) + " with eval loss " + str(best_loss))
                 patient_steps = 0
                 torch.save(self.model.state_dict(), self.args.model_dir + "best.ckpt")
             else:
@@ -184,15 +252,16 @@ class Trainer(object):
         if args.load_mdir is None:
             print("load model directory is None")
             exit(0)
-            
-        self.model.load_state_dict(torch.load(args.load_mdir))
+        else:
+            self.model.load_state_dict(torch.load(args.load_mdir))
 
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
 
-        self.sampling(args.test_split)
+        iscore, fid = self.sampling(args.test_split,5000)
+        self.log.info("Test Inception Score: " + str(iscore) + "\t FID Score: " + str(fid))
 
-    def sampling(self, split):
+    def sampling(self, split, num_samples=5000):
 
         assert split in {'train','valid','test'}
 
@@ -200,7 +269,13 @@ class Trainer(object):
 
         data_loader = self.get_loader(split)
 
+        all_samples = []
+        ns = 0
+
         for i, batch in enumerate(data_loader):
+            if num_samples is not None:
+                ns += len(batch)
+
             batch = batch.to(self.args.device)
             
             step = 0
@@ -212,34 +287,89 @@ class Trainer(object):
 
             prev_batch = curr_batch.clone() + 100
 
-            while ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
+            if self.args.sampling_strategy == 'ann_langevin':
+                for noise_level in self.args.noise_std:
+                    step_size = args.step_lr * ((noise_level**2)/(self.args.noise_std[-1]**2))
+                    for step in range(self.args.max_step):
+                        noise = torch.normal(mean=0,std=1,size=curr_batch.size()).to(self.args.device)
+                        
+                        if self.args.model_objective == 'score':
+                            energy_gradient = self.model(curr_batch)  
+
+                        else:
+                            energy = self.model(curr_batch)
+                            curr_batch.requires_grad = True
+                            energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
+                                                                    grad_outputs=torch.ones(energy.size()).to(self.args.device),
+                                                                    create_graph=True, retain_graph=True, only_inputs=True)[0]
+
+                        if self.args.reweight:
+                            energy_gradient = energy_gradient / noise_level
+
+                        prev_batch = curr_batch.clone()
+
+                        curr_batch = curr_batch + (step_size/2)*energy_gradient + (step_size**0.5)*noise
+
+                        if step%25==0:
+                            self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+
+            else:
+                while step <= self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
+                
+
+                    if self.args.model_objective == 'score':
+                        energy_gradient = self.model(curr_batch)  
+
+                    else:
+                        energy = self.model(curr_batch)
+                        curr_batch.requires_grad = True
+                        energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
+                                                                grad_outputs=torch.ones(energy.size()).to(self.args.device),
+                                                                create_graph=True, retain_graph=True, only_inputs=True)[0]
+
+                    
+
+                    prev_batch = curr_batch.clone()
+
+                    if self.args.sampling_strategy == 'vanilla':
+    #                    print("vanilla")
+                        curr_batch = curr_batch + self.args.step_lr * energy_gradient
+                    elif self.args.sampling_strategy == 'langevin':
+                        curr_batch = curr_batch + (self.args.step_lr/2) * energy_gradient + (self.args.step_lr**0.5)*torch.normal(mean=0,std=1,size=energy_gradient.size())
+
+                    self.args.step_lr = self.args.step_lr * self.args.lr_anneal
+
+                    if step%25==0:
+                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                    
+                    step += 1 
+
+            all_samples.append(curr_batch.detach())
+            # norm_batch = (curr_batch - np.min(curr_batch))
             
 
-                if self.args.model_objective == 'score':
-                    energy_gradient = self.model(curr_batch)  
+            if num_samples and ns >= num_samples:
+                break
 
-                else:
-                    energy = self.model(curr_batch)
-                    curr_batch.requires_grad = True
-                    energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
-                                                            grad_outputs=torch.ones(energy.size()).to(self.args.device),
-                                                            create_graph=True, retain_graph=True, only_inputs=True)[0]
+        all_samples = torch.cat(all_samples).detach()
+        # print(all_samples.shape)
 
-                self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nTarget gradient: " + str(torch.norm(curr_batch - batch, dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+        # up = torch.nn.Upsample(size=(299, 299), mode='bilinear')
+        # norm = torchvision.transforms
+        # all_acts = self.inception(up(all_samples)).detach().numpy() 
+        # print(all_acts.shape)
 
-                prev_batch = curr_batch.clone()
+        # mean = np.mean(all_acts,axis=0)
+        # covar = np.cov(all_acts,rowvar=False)
 
-                if self.args.sampling_strategy == 'vanilla':
-#                    print("vanilla")
-                    curr_batch = curr_batch + self.args.step_lr * energy_gradient
-                elif self.args.sampling_strategy == 'langevin':
-                    curr_batch = curr_batch + (self.args.step_lr/2) * energy_gradient + (self.args.step_lr**0.5)*torch.normal(mean=0,std=1,size=energy_gradient.size())
+        # fid = calculate_frechet_distance(mean, covar, )
+        # print("Fid score: ", fid)
 
-                self.args.step_lr = self.args.step_lr * self.args.lr_anneal
-
-                self.log.info("\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
-                
-                step += 1 
+        all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0]-torch.min(all_samples,dim=0)[0])
+        all_samples = (all_samples * 2)-1
+        mean_inception,std_inception,fid = inception_score(inception_model = self.inception, images=all_samples, cuda=False, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
+        # print(mean_inception,std_inception,fid)
+        return mean_inception,fid
             
 
 if __name__ == '__main__':

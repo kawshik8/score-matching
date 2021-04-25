@@ -34,10 +34,13 @@ parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
 parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
 parser.add_argument("--early-stop-patience", type=int, default=10, help="number of epochs to wait for val loss to decrease before training stops early")
 parser.add_argument("--optimizer", type=str, default='adam', choices=['sgd','sgd_mom','adam'], help="optimization strategy")
+parser.add_argument("--model-selection", type=str, default='train', choices=['train','sampling'], help="strategy to select best model")
+parser.add_argument("--selection-num-samples", type=int, default=1000, help="number of images to sample for selecting best model")
+parser.add_argument("--fid-layer", type=int, default=-1, help="which layer to use for activations")
 
 # Sampling options
-parser.add_argument("--sampling-batch-size", type=int, default=1, help="number of images per minibatch")
-parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin'], help="sampling strategy")
+parser.add_argument("--sampling-batch-size", type=int, default=1000, help="number of images per minibatch")
+parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin','ann_langevin'], help="sampling strategy")
 parser.add_argument('--init-value', type=str, default='uniform', choices=['zeros','orig','random','uniform'],help='where to start during sampling')
 # parser.add_argument('--init-noise', type=float, default=10, help='initial noise level to start from during sampling')
 parser.add_argument('--step-lr', default=0.1, help='provide a list to use a mixture of learning rates')
@@ -71,9 +74,20 @@ def process_args():
     if not os.path.exists(args.model_dir):
         os.mkdir(args.model_dir)
 
-    args.noise_std = args.noise_std.split(",")
-    for i in range(len(args.noise_std)):
-        args.noise_std[i] = float(args.noise_std[i])
+    if len(args.noise_std.split(",")) == 1:
+        args.noise_std = args.noise_std.split(",")
+        for i in range(len(args.noise_std)):
+            args.noise_std[i] = float(args.noise_std[i])
+    else:
+        std1,stdl,l = args.noise_std.split(",")
+        l = int(l)
+        a = float(std1)
+        al = float(stdl) 
+        r = (al/a)**(1/(l-1))
+        args.noise_std = []
+        for i in range(l):
+            args.noise_std.append(a * (r**i))
+        # print(args.noise_std)
 
     # print(args)
     return args

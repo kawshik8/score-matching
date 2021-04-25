@@ -8,6 +8,24 @@ import numpy as np
 import math
 import logging as log
 import torchvision.models.resnet as resnet
+from torchvision.models.inception import inception_v3
+
+class Inception(nn.Module):
+    def __init__(self, layer=-1):
+        super(Inception, self).__init__()
+        model = inception_v3(pretrained=True, transform_input=False, aux_logits=False)
+        modules1 = list(model.children())[:-2]
+        self.model = nn.Sequential(*modules1)
+        modules2 = list(model.children())[-2:]
+        self.rest = nn.Sequential(*modules2)
+
+
+    def forward(self,x):
+        features = self.model(x).view(x.size(0),-1)
+        logits = self.rest(features)
+
+        return features, logits
+
 
 class Conv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, transpose = False):
@@ -182,5 +200,9 @@ if __name__ == "__main__":
     model = Encoder(3)
     print(model)
     print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
+
+    model = Inception_score()
+    print(model)
+    print(torch.rand(64,3,299,299).shape, model(torch.rand(64,3,299,299)).shape)
     # print(model)
     
