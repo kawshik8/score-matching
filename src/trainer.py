@@ -27,7 +27,7 @@ class Trainer(object):
             self.model = Encoder()
 
         self.inception = Inception(args.fid_layer).eval()
-        self.model.to(self.args.device)
+        
         
         # if args.dataset == 'cifar10':
         self.train_data = Data(args, 'train')
@@ -66,6 +66,8 @@ class Trainer(object):
             f = open(fname,'wb+')
             np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
             print(self.fid_mean.shape,self.fid_covar.shape)
+
+        self.model.to(self.args.device)
             
             
 
@@ -77,7 +79,8 @@ class Trainer(object):
         covars = []
         acts = []
         up = torch.nn.Upsample(size=(299, 299), mode='bilinear')
-        for i,batch in enumerate(self.get_loader(split)):
+        loader = DataLoader(self.data[split], batch_size = 8, shuffle=True, num_workers = args.num_workers)
+        for i,batch in enumerate(loader):
             batch = batch.to(self.args.device)
             batch = (batch - torch.min(batch,dim=0)[0])/(torch.max(batch,dim=0)[0] - torch.min(batch,dim=0)[0])
             batch = (batch * 2) - 1
@@ -93,7 +96,7 @@ class Trainer(object):
 
         mean = np.mean(act,axis=0)
         covar = np.cov(act,rowvar=False)
-        
+        self.inception.to(torch.device('cpu'))
         # all_fid = torch.stack(all_fid).mean()
         return mean,covar
 
