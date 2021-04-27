@@ -309,7 +309,7 @@ class Trainer(object):
                         curr_batch = curr_batch + (step_size/2)*energy_gradient + (step_size**0.5)*noise
 
                         # if step%25==0:
-                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
                 while step < self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:

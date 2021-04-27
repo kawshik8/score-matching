@@ -50,7 +50,7 @@ parser.add_argument("--sampling-batch-size", type=int, default=1, help="number o
 parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin','ann_langevin'], help="sampling strategy")
 parser.add_argument('--init-value', type=str, default='uniform', choices=['zeros','orig','random','uniform'],help='where to start during sampling')
 # parser.add_argument('--init-noise', type=float, default=10, help='initial noise level to start from during sampling')
-parser.add_argument('--step-lr', default=0.1, help='provide a list to use a mixture of learning rates')
+parser.add_argument('--step-lr', default=0.1, type=float, help='provide a list to use a mixture of learning rates')
 parser.add_argument('--step-fgrad', type=float, default=1e-4, help='final grad to stop at')
 parser.add_argument('--max-step', type=int, default=250, help='maximum no of steps for MCMC sampling')
 # parser.add_argument('--step-grad-choice', type=str, default='rgrad', choices=['rgrad','pgrad','mgrad','agrad'], help='step using predicted gradient vs real gradient vs equal combination vs annealed combination (0.25 tgrad 0.5 annealed prob mixture 0.25 pgrad)')
