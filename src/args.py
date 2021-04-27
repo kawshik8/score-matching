@@ -8,7 +8,7 @@ parser = argparse.ArgumentParser()
 
 # cpu vs gpu
 parser.add_argument("--device", type=str, default="cuda:0", help="which device to run on")
-parser.add_argument("--num-workers", type=int, default=8, help="number of cpu workers in iterator")
+parser.add_argument("--num-workers", type=int, default=2, help="number of cpu workers in iterator")
 
 # data params
 parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "mnist","celeba"], help="dataset")
@@ -46,7 +46,7 @@ parser.add_argument("--fid-layer", type=int, default=-1, help="which layer to us
 parser.add_argument("--ntest", type=int, default=1000, help="no of samples to generate")
 parser.add_argument("--save-nsamples", type=int, default=100, help="store generated images")
 parser.add_argument("--sampling-log-freq", type=int, default=99, help="frequency of logging during sampling")
-parser.add_argument("--sampling-batch-size", type=int, default=1, help="number of images per minibatch")
+parser.add_argument("--sampling-batch-size", type=int, default=128, help="number of images per minibatch")
 parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin','ann_langevin'], help="sampling strategy")
 parser.add_argument('--init-value', type=str, default='uniform', choices=['zeros','orig','random','uniform'],help='where to start during sampling')
 # parser.add_argument('--init-noise', type=float, default=10, help='initial noise level to start from during sampling')
@@ -76,8 +76,9 @@ def process_args():
 
     if args.mfile is None:
         if args.test_model:
-            args.mfile = args.load_mdir.split("/")[-1]
-        args.mfile = ("Test_Sample" if args.test_model else "Train") + "_" + args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
+            args.mfile = args.load_mdir.split("/")[-1] + "/testing"
+        else:
+            args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
     args.model_dir += args.mfile + "/"
 
     if not os.path.exists(args.model_dir):
