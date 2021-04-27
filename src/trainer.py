@@ -258,10 +258,10 @@ class Trainer(object):
         else:
             self.model.load_state_dict(torch.load(args.load_mdir))
 
-        test_loss = self.train_test('eval', args.test_split, 0)
-        self.log.info("Test Loss: " + str(test_loss))
+        #test_loss = self.train_test('eval', args.test_split, 0)
+        #self.log.info("Test Loss: " + str(test_loss))
 
-        iscore, fid = self.sampling(args.test_split,5000)
+        iscore, fid = self.sampling(args.test_split,self.args.sampling_ntotal)
         self.log.info("Test Inception Score: " + str(iscore) + "\t FID Score: " + str(fid))
 
     def sampling(self, split, num_samples=5000):
@@ -274,6 +274,7 @@ class Trainer(object):
 
         all_samples = []
         ns = 0
+        noise = torch.normal(mean=0,std=1,size=[self.args.batch_size,3,32,32])#.to(self.args.device)
 
         for i, batch in enumerate(data_loader):
             if num_samples is not None:
@@ -284,37 +285,41 @@ class Trainer(object):
             step = 0
 
             if self.args.init_value == 'uniform':
-                curr_batch = torch.rand(batch.shape)
+                curr_batch = torch.rand(batch.shape)#.to(self.args.device)
 
             self.log.info("batch: " + str(i))
 
             prev_batch = curr_batch.clone() + 100
+            #noise = torch.normal(mean=0,std=1,size=curr_batch.size()).to(self.args.device)
 
             if self.args.sampling_strategy == 'ann_langevin':
                 for noise_level in self.args.noise_std:
                     step_size = args.step_lr * ((noise_level**2)/(self.args.noise_std[-1]**2))
+                    #noise = torch.normal(mean=0,std=1,size=curr_batch.size()).to(self.args.device)
                     for step in range(self.args.max_step):
-                        noise = torch.normal(mean=0,std=1,size=curr_batch.size()).to(self.args.device)
+                        #noise = torch.normal(mean=0,std=1,size=curr_batch.size()).to(self.args.device)
                         
                         if self.args.model_objective == 'score':
-                            energy_gradient = self.model(curr_batch)  
+                            energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()  
 
                         else:
-                            energy = self.model(curr_batch)
+                            energy = self.model(curr_batch.to(self.args.device)).detach().cpu() 
                             curr_batch.requires_grad = True
                             energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
                                                                     grad_outputs=torch.ones(energy.size()).to(self.args.device),
                                                                     create_graph=True, retain_graph=True, only_inputs=True)[0]
 
+                        #print(torch.norm(energy_gradient,dim=1).mean().item())
                         if self.args.reweight:
-                            energy_gradient = energy_gradient / noise_level
+
+                            energy_gradient /= noise_level
 
                         prev_batch = curr_batch.clone()
 
-                        curr_batch = curr_batch + (step_size/2)*energy_gradient + (step_size**0.5)*noise
+                        curr_batch += (step_size/2)*energy_gradient + (step_size**0.5)*noise
 
-                        if step%25==0:
-                            self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        if step%self.args.sampling_log_freq==0:
+                            self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
                 while step <= self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
@@ -370,7 +375,7 @@ class Trainer(object):
 
         all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0]-torch.min(all_samples,dim=0)[0])
         all_samples = (all_samples * 2)-1
-        mean_inception,std_inception,fid = inception_score(inception_model = self.inception, images=all_samples, cuda=False, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
+        mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
         # print(mean_inception,std_inception,fid)
         return mean_inception,fid
             
