@@ -12,6 +12,7 @@ from utils import *
 from data import *
 from models import *
 from args import * 
+import cv2
 
 class Trainer(object):
     def __init__(self, args):
@@ -22,12 +23,11 @@ class Trainer(object):
         self.args = args
 
         if args.model_objective == 'score':
-            self.model = UNet()
+            self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block)
         elif args.model_objective == 'energy':
-            self.model = Encoder()
+            self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block)
 
         self.inception = Inception(args.fid_layer).eval()
-        
         
         # if args.dataset == 'cifar10':
         self.train_data = Data(args, 'train')
@@ -38,6 +38,7 @@ class Trainer(object):
         self.train_loader = DataLoader(self.train_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
         self.val_loader = DataLoader(self.val_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
         self.test_loader = DataLoader(self.test_data, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
+        self.tloader = {'train':self.train_loader, 'valid':self.val_loader, 'test': self.test_loader}
 
         if 'sgd' in args.optimizer:
             self.optimizer = torch.optim.SGD(self.model.parameters(), lr = args.lr, momentum = 0.9 if "mom" in args.optimizer else 0)
@@ -45,7 +46,9 @@ class Trainer(object):
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr = args.lr)
 
         self.sampling_trainloader = DataLoader(self.train_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
+        self.sampling_valloader = DataLoader(self.val_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
         self.sampling_testloader = DataLoader(self.test_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
+        self.sloader = {'train':self.sampling_trainloader, 'valid':self.sampling_valloader, 'test': self.sampling_testloader}
 
         self.log = create_logger(__name__, silent=False, to_disk=True,
                                  log_file=args.model_dir + "log.txt")
@@ -100,17 +103,6 @@ class Trainer(object):
         # all_fid = torch.stack(all_fid).mean()
         return mean,covar
 
-
-    def get_loader(self, split):
-        if split == 'train':
-            data_loader = self.train_loader
-        elif split == 'valid':
-            data_loader = self.val_loader
-        else:
-            data_loader = self.test_loader
-
-        return data_loader
-
     def train_test(self, what, split, epoch):
         """
         Train the model
@@ -123,7 +115,7 @@ class Trainer(object):
         else:
             self.model.eval()
 
-        data_loader = self.get_loader(split)
+        data_loader = self.tloader[split]
         total_losses = []
 
         with tqdm(total=len(data_loader.dataset)) as progress:
@@ -140,12 +132,12 @@ class Trainer(object):
 
                 noisy_batch = batch + noise 
 
-                image_diff = (noisy_batch - batch)
+                image_diff = - (noisy_batch - batch)
 
                 if self.args.reweight:
-                    if len(self.args.noise_std) > 1:
-                        image_diff = image_diff / noise_level
-                    else:
+                    # if len(self.args.noise_std) > 1:
+                    #     image_diff = image_diff / noise_level
+                    # else:
                         image_diff = image_diff / (noise_level**2)
 
                 if self.args.model_objective == 'score':
@@ -154,20 +146,21 @@ class Trainer(object):
                 else:
                     energy = self.model(noisy_batch)
                     noisy_batch.requires_grad = True
-                    energy_gradient = torch.autograd.grad(outputs=energy, inputs=noisy_batch,
-                                                            grad_outputs=torch.ones(energy.size()).to(self.args.device),
-                                                            create_graph=True, retain_graph=True, only_inputs=True)[0]
+                    energy_gradient = torch.autograd.grad(outputs=energy.sum(), inputs=noisy_batch, create_graph=True)[0]
 
                     self.writer.add_scalar(what + "_" + split + '-set/energy_batch_noise-' + str(noise_level), energy.mean(), step)
 
                 self.writer.add_scalar(what + "_" + split + '-set/energy_gradient_l2norm_batch_noise-' + str(noise_level), torch.norm(energy_gradient,dim=1).mean(), step)
 
                 if self.args.reweight:
-                    if len(self.args.noise_std) == 1:
+                    # if len(self.args.noise_std) == 1:
                         energy_gradient = energy_gradient/noise_level
 
-                loss = 0.5*((energy_gradient + image_diff)**2)
-                loss = torch.mean(loss)  
+                if len(self.args.noise_std) > 1:
+                    loss = (1/2.) * ((energy_gradient.view(energy_gradient.shape[0], -1) - image_diff.view(image_diff.shape[0],-1))**2).sum(dim=-1) * noise_level **2
+                    loss = loss.mean(dim=0)
+                else:
+                    loss = (1/2.) * ((energy_gradient.view(energy_gradient.shape[0], -1) - image_diff.view(image_diff.shape[0],-1))**2).sum(dim=-1).mean(dim=0)
 
                 self.writer.add_scalar(what + "_" + split + '-set/loss_batch_noise-' + str(noise_level), loss, step)  
 
@@ -261,7 +254,7 @@ class Trainer(object):
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
 
-        iscore, fid = self.sampling(args.test_split,5000)
+        iscore, fid = self.sampling(args.test_split,self.args.ntest)
         self.log.info("Test Inception Score: " + str(iscore) + "\t FID Score: " + str(fid))
 
     def sampling(self, split, num_samples=5000):
@@ -270,21 +263,24 @@ class Trainer(object):
 
         self.model.eval()
 
-        data_loader = self.get_loader(split)
+        data_loader = self.sloader[split]
 
         all_samples = []
         ns = 0
 
+        # with tqdm(total=num_samples) as progress:
         for i, batch in enumerate(data_loader):
             if num_samples is not None:
                 ns += len(batch)
 
-            batch = batch.to(self.args.device)
+            # batch = batch.to(self.args.device)
             
             step = 0
 
+            noise = torch.normal(mean=0,std=1,size=batch.size())#.to(self.args.device)
+
             if self.args.init_value == 'uniform':
-                curr_batch = torch.rand(batch.shape)
+                curr_batch = batch#torch.rand(batch.shape)
 
             self.log.info("batch: " + str(i))
 
@@ -294,13 +290,12 @@ class Trainer(object):
                 for noise_level in self.args.noise_std:
                     step_size = args.step_lr * ((noise_level**2)/(self.args.noise_std[-1]**2))
                     for step in range(self.args.max_step):
-                        noise = torch.normal(mean=0,std=1,size=curr_batch.size()).to(self.args.device)
                         
                         if self.args.model_objective == 'score':
-                            energy_gradient = self.model(curr_batch)  
+                            energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()
 
                         else:
-                            energy = self.model(curr_batch)
+                            energy = self.model(curr_batch.to(self.args.device)).detach().cpu()
                             curr_batch.requires_grad = True
                             energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
                                                                     grad_outputs=torch.ones(energy.size()).to(self.args.device),
@@ -313,11 +308,11 @@ class Trainer(object):
 
                         curr_batch = curr_batch + (step_size/2)*energy_gradient + (step_size**0.5)*noise
 
-                        if step%25==0:
-                            self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        # if step%25==0:
+                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
-                while step <= self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
+                while step < self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
                 
 
                     if self.args.model_objective == 'score':
@@ -342,35 +337,32 @@ class Trainer(object):
 
                     self.args.step_lr = self.args.step_lr * self.args.lr_anneal
 
-                    if step%25==0:
-                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                    # if step%25==0:
+                    self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
                     
                     step += 1 
 
             all_samples.append(curr_batch.detach())
             # norm_batch = (curr_batch - np.min(curr_batch))
             
-
+            # progress.update(len(batch))
+            
             if num_samples and ns >= num_samples:
                 break
 
         all_samples = torch.cat(all_samples).detach()
         # print(all_samples.shape)
 
-        # up = torch.nn.Upsample(size=(299, 299), mode='bilinear')
-        # norm = torchvision.transforms
-        # all_acts = self.inception(up(all_samples)).detach().numpy() 
-        # print(all_acts.shape)
+        idx = torch.randperm(all_samples.size(0))[:self.args.save_nsamples]
+        save_samples = np.transpose(all_samples[idx].numpy(),(0,2,3,1))
+        for i in range(len(save_samples)):
+            nsample = save_samples[i]*255
+            cv2.imwrite(self.args.isave_dir + str(i) + ".jpg", nsample)
 
-        # mean = np.mean(all_acts,axis=0)
-        # covar = np.cov(all_acts,rowvar=False)
-
-        # fid = calculate_frechet_distance(mean, covar, )
-        # print("Fid score: ", fid)
 
         all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0]-torch.min(all_samples,dim=0)[0])
         all_samples = (all_samples * 2)-1
-        mean_inception,std_inception,fid = inception_score(inception_model = self.inception, images=all_samples, cuda=False, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
+        mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
         # print(mean_inception,std_inception,fid)
         return mean_inception,fid
             

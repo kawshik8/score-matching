@@ -2,6 +2,7 @@
 import argparse
 import os
 import torch
+import numpy as np
 
 parser = argparse.ArgumentParser()
 
@@ -12,12 +13,15 @@ parser.add_argument("--num-workers", type=int, default=8, help="number of cpu wo
 # data params
 parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "mnist","celeba"], help="dataset")
 parser.add_argument("--data-dir", type=str, default="../../data/", help="directory to access data")
+parser.add_argument("--isave-dir", type=str, default=None, help="no of samples to generate")
 
 # model params
 parser.add_argument("--mfile", type=str, default=None, help="name of the file")
 parser.add_argument("--model-dir", type=str, default="./models/", help="directory of the data files")
 parser.add_argument("--model-objective", type=str, default="score", choices=["score", "energy"], help="output of the model")
-parser.add_argument("--unet-depth", type=str, default=5, help="depth of unet model")
+parser.add_argument("--unet-depth", type=int, default=3, help="depth of unet model")
+parser.add_argument("--unet-block", type=str, default='conv_block', choices=['conv_block','res_block'], help="depth of unet model")
+parser.add_argument("--norm-type", type=str, default='batch', choices=['batch','instance'], help="depth of unet model")
 
 # noise params
 parser.add_argument("--noise-std", type=str, default="10", help="Standard deviation of noise (Give multiple noise levels separated by commas)")
@@ -39,7 +43,10 @@ parser.add_argument("--selection-num-samples", type=int, default=1000, help="num
 parser.add_argument("--fid-layer", type=int, default=-1, help="which layer to use for activations")
 
 # Sampling options
-parser.add_argument("--sampling-batch-size", type=int, default=1000, help="number of images per minibatch")
+parser.add_argument("--ntest", type=int, default=1000, help="no of samples to generate")
+parser.add_argument("--save-nsamples", type=int, default=100, help="store generated images")
+parser.add_argument("--sampling-log-freq", type=int, default=99, help="frequency of logging during sampling")
+parser.add_argument("--sampling-batch-size", type=int, default=1, help="number of images per minibatch")
 parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin','ann_langevin'], help="sampling strategy")
 parser.add_argument('--init-value', type=str, default='uniform', choices=['zeros','orig','random','uniform'],help='where to start during sampling')
 # parser.add_argument('--init-noise', type=float, default=10, help='initial noise level to start from during sampling')
@@ -68,28 +75,33 @@ def process_args():
         os.mkdir(args.model_dir)
 
     if args.mfile is None:
-        args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
+        if args.test_model:
+            args.mfile = args.load_mdir.split("/")[-1]
+        args.mfile = ("Test_Sample" if args.test_model else "Train") + "_" + args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
     args.model_dir += args.mfile + "/"
 
     if not os.path.exists(args.model_dir):
         os.mkdir(args.model_dir)
 
+    args.isave_dir = args.model_dir + "simages/"
+    if not os.path.exists(args.isave_dir):
+        os.mkdir(args.isave_dir)
+
     if len(args.noise_std.split(",")) == 1:
         args.noise_std = args.noise_std.split(",")
-        for i in range(len(args.noise_std)):
-            args.noise_std[i] = float(args.noise_std[i])
+        args.noise_std = float(args.noise_std[0])
     else:
         std1,stdl,l = args.noise_std.split(",")
         l = int(l)
         a = float(std1)
         al = float(stdl) 
-        r = (al/a)**(1/(l-1))
-        args.noise_std = []
-        for i in range(l):
-            args.noise_std.append(a * (r**i))
+        # print(np.exp(np.linspace(np.log(a),np.log(al),l)))
+        args.noise_std = np.exp(np.linspace(np.log(a),np.log(al),l))
+        # print(type(args.noise_std[0]))
         # print(args.noise_std)
 
     # print(args)
     return args
 
-process_args()
+if __name__ == '__main__':
+    process_args()
