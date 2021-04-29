@@ -84,6 +84,11 @@ def process_args():
         if args.mfile is None:
             print("Please give a name for the experiment")
             exit(0)
+        elif os.path.exists(args.model_dir + args.mfile):
+            for i in range(100):
+                args.mfile = args.mfile + '_' + str(i)
+                if not os.path.exists(args.model_dir + args.mfile):
+                    break
 
     arg_groups={}
 
