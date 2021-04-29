@@ -96,7 +96,7 @@ def process_args():
 
     if len(args.noise_std.split(",")) == 1:
         args.noise_std = args.noise_std.split(",")
-        args.noise_std = float(args.noise_std[0])
+        args.noise_std = [float(args.noise_std[0])]
     else:
         std1,stdl,l = args.noise_std.split(",")
         l = int(l)
