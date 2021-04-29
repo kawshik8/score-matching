@@ -21,7 +21,7 @@ parser.add_argument("--model-dir", type=str, default="./models/", help="director
 parser.add_argument("--model-objective", type=str, default="score", choices=["score", "energy"], help="output of the model")
 parser.add_argument("--unet-depth", type=int, default=3, help="depth of unet model")
 parser.add_argument("--unet-block", type=str, default='conv_block', choices=['conv_block','res_block'], help="depth of unet model")
-parser.add_argument("--norm-type", type=str, default='batch', choices=['batch','instance'], help="depth of unet model")
+parser.add_argument("--norm-type", type=str, default='batch', choices=['batch','instance','instance++'], help="depth of unet model")
 
 # noise params
 parser.add_argument("--noise-std", type=str, default="10", help="Standard deviation of noise (Give multiple noise levels separated by commas)")

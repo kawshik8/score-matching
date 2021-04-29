@@ -26,9 +26,36 @@ class Inception(nn.Module):
 
         return features, logits
 
+class InstanceNorm2dPlus(nn.Module):
+    def __init__(self, num_features, bias=True):
+        super().__init__()
+        self.num_features = num_features
+        self.bias = bias
+        self.instance_norm = nn.InstanceNorm2d(num_features, affine=False, track_running_stats=False)
+        self.alpha = nn.Parameter(torch.zeros(num_features))
+        self.gamma = nn.Parameter(torch.zeros(num_features))
+        self.alpha.data.normal_(1, 0.02)
+        self.gamma.data.normal_(1, 0.02)
+        if bias:
+            self.beta = nn.Parameter(torch.zeros(num_features))
+
+    def forward(self, x):
+        means = torch.mean(x, dim=(2, 3))
+        m = torch.mean(means, dim=-1, keepdim=True)
+        v = torch.var(means, dim=-1, keepdim=True)
+        means = (means - m) / (torch.sqrt(v + 1e-5))
+        h = self.instance_norm(x)
+
+        if self.bias:
+            h = h + means[..., None, None] * self.alpha[..., None, None]
+            out = self.gamma.view(-1, self.num_features, 1, 1) * h + self.beta.view(-1, self.num_features, 1, 1)
+        else:
+            h = h + means[..., None, None] * self.alpha[..., None, None]
+            out = self.gamma.view(-1, self.num_features, 1, 1) * h
+        return out
 
 class Conv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, transpose = False, norm_type='batch'):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, transpose = False, norm_type='batch'):
         super(Conv, self).__init__()
         if transpose:
             self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding)
@@ -39,6 +66,8 @@ class Conv(nn.Module):
             self.norm = nn.BatchNorm2d(out_channels)
         elif norm_type == 'instance':
             self.norm = nn.InstanceNorm2d(out_channels)
+        elif norm_type == 'instance++':
+            self.norm = InstanceNorm2dPlus(out_channels)
 
 
         self.act = nn.ReLU()
@@ -83,6 +112,9 @@ class PreActBlock(nn.Module):
         elif norm_type == 'instance':
             self.bn1 = nn.InstanceNorm2d(in_channels)
             self.bn2 = nn.InstanceNorm2d(mid_channels)
+        elif norm_type == 'instance++':
+            self.bn1 = InstanceNorm2dPlus(in_channels)
+            self.bn2 = InstanceNorm2dPlus(mid_channels)
         
         self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=3, stride=1, padding=1, bias=False)
         self.conv2 = nn.Conv2d(mid_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
@@ -111,7 +143,7 @@ class Down(nn.Module):
         if maxpool:
             self.pool = nn.MaxPool2d(2)
         else:
-            self.pool = Conv(in_channels, out_channels, kernel_size = 2, stride = 2, norm_type=norm_type)
+            self.pool = Conv(in_channels, out_channels, kernel_size = 2, stride = 2, padding=0, norm_type=norm_type)
 
         if block == 'conv_block':
             self.conv = DoubleConv(in_channels if maxpool else out_channels, out_channels, norm_type=norm_type)
@@ -139,11 +171,12 @@ class Up(nn.Module):
             else:
                 self.conv = PreActBlock(in_channels + in_channels // 2, out_channels, in_channels // 2, norm_type=norm_type)
         else:
-            self.up = Conv(in_channels , in_channels // 2, kernel_size=2, stride=2, transpose=True, norm_type=norm_type)
+            self.up = Conv(in_channels , in_channels // 2, kernel_size=2, stride=2, padding=0, transpose=True, norm_type=norm_type)
             if block == 'conv_block':
                 self.conv = DoubleConv(in_channels, out_channels, norm_type=norm_type)
             else:
-                self.conv = PreActBlock(in_channels, out_channels, norm_type=norm_type)
+                self.conv = nn.Sequential(Conv(in_channels, out_channels, kernel_size=3, stride=1, padding=1, norm_type=norm_type), 
+                                          PreActBlock(out_channels, out_channels, norm_type=norm_type))
 
 
     def forward(self, x1, x2):
@@ -155,7 +188,7 @@ class Up(nn.Module):
 
 
 class In_OutConv(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super(In_OutConv, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
 
@@ -175,8 +208,8 @@ class UNet(nn.Module):
 
         for d in range(depth+1):
             if d==0:
-                self.down_block.append(DoubleConv(n_channels, init_channels, norm_type=norm_type) if block=='conv_block' else nn.Sequential(In_OutConv(n_channels, init_channels), PreActBlock(init_channels, init_channels, norm_type=norm_type)))
-                self.up_block.append(In_OutConv(init_channels, n_channels))
+                self.down_block.append(DoubleConv(n_channels, init_channels, norm_type=norm_type) if block=='conv_block' else nn.Sequential(In_OutConv(n_channels, init_channels, kernel_size=3, stride=1, padding=1), PreActBlock(init_channels, init_channels, norm_type=norm_type)))
+                self.up_block.append(In_OutConv(init_channels, n_channels, kernel_size=3, stride=1, padding=1))
             else:
                 self.down_block.append(Down(init_channels, init_channels * 2, maxpool=bilinear, norm_type=norm_type, block=block))
                 self.up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear, norm_type=norm_type, block=block)]).extend(self.up_block)
@@ -244,7 +277,9 @@ class Encoder(nn.Module):
 
 
 if __name__ == "__main__":
-    model = UNet(3, depth=3)
+    from args import process_args
+    args = process_args()
+    model = UNet(depth=args.unet_depth, norm_type=args.norm_type, block=args.unet_block)
     print(model)
     print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
 

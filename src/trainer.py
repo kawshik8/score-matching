@@ -156,11 +156,12 @@ class Trainer(object):
                     # if len(self.args.noise_std) == 1:
                         energy_gradient = energy_gradient/noise_level
 
-                if len(self.args.noise_std) > 1:
+                if len(self.args.noise_std) > 1 and self.args.reweight:
                     loss = (1/2.) * ((energy_gradient.view(energy_gradient.shape[0], -1) - image_diff.view(image_diff.shape[0],-1))**2).sum(dim=-1) * noise_level **2
                     loss = loss.mean(dim=0)
                 else:
                     loss = (1/2.) * ((energy_gradient.view(energy_gradient.shape[0], -1) - image_diff.view(image_diff.shape[0],-1))**2).sum(dim=-1).mean(dim=0)
+                
 
                 self.writer.add_scalar(what + "_" + split + '-set/loss_batch_noise-' + str(noise_level), loss, step)  
 
