@@ -212,7 +212,7 @@ class Trainer(object):
                 iscore, fid = self.sampling('valid',args.selection_num_samples)
 
                 if best_iscore is None or best_iscore > iscore:
-                    best_metric = iscore
+                    best_iscore = iscore
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval inception score " + str(best_iscore))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_iscore.ckpt")
                 
@@ -308,8 +308,8 @@ class Trainer(object):
 
                         curr_batch = curr_batch + (step_size/2)*energy_gradient + (step_size**0.5)*noise
 
-                        # if step%25==0:
-                        self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        if step%self.args.sampling_log_freq==0:
+                          self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
                 while step < self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
@@ -337,11 +337,11 @@ class Trainer(object):
 
                     self.args.step_lr = self.args.step_lr * self.args.lr_anneal
 
-                    # if step%25==0:
-                    self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                    if step%self.args.sampling_log_freq==0:
+                      self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
                     
                     step += 1 
-
+            self.log.info(str(torch.unique(curr_batch)))
             all_samples.append(curr_batch.detach())
             # norm_batch = (curr_batch - np.min(curr_batch))
             
@@ -359,7 +359,7 @@ class Trainer(object):
             nsample = save_samples[i]*255
             cv2.imwrite(self.args.isave_dir + str(i) + ".jpg", nsample)
 
-
+        print(torch.unique(all_samples))
         all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0]-torch.min(all_samples,dim=0)[0])
         all_samples = (all_samples * 2)-1
         mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar)

@@ -78,7 +78,13 @@ def process_args():
         if args.test_model:
             args.mfile = args.load_mdir.split("/")[-1] + "/testing"
         else:
-            args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs)
+            args.mfile = args.model_objective + "_" + args.dataset + "_noise-" + str(args.noise_std) + "_metric-" + args.distance_metric + "_bsize-" + str(args.batch_size) + "_opt-" + str(args.optimizer) + "_lr-" + str(args.lr) + "_e" + str(args.n_epochs) + "_select-" + str(args.model_selection)
+
+        if args.model_selection == 'sampling':
+            args.mfile += "_nsamples-" + str(args.ntest) + "_strategy-" + str(args.sampling_strategy) + "_stepsize-" + str(args.step_lr) + "_maxstep-" + str(args.max_step)
+            if args.lr_anneal_strategy=='const' and args.lr_anneal < 1.0:
+                args.mfile += "_lr-anneal-" + str(args.lr_anneal)
+
     args.model_dir += args.mfile + "/"
 
     if not os.path.exists(args.model_dir):
