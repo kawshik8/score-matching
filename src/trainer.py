@@ -128,7 +128,7 @@ class Trainer(object):
 
             all_losses = []
             for noise_level in self.args.noise_std:
-                noise = torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
+                noise = torch.randn_like(batch).to(self.args.device)#torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
 
                 noisy_batch = batch + noise 
 
@@ -277,10 +277,10 @@ class Trainer(object):
             
             step = 0
 
-            noise = torch.normal(mean=0,std=1,size=batch.size())#.to(self.args.device)
+            noise = torch.randn_like(batch)#torch.normal(mean=0,std=1,size=batch.size())#.to(self.args.device)
 
             if self.args.init_value == 'uniform':
-                curr_batch = batch#torch.rand(batch.shape)
+                curr_batch = torch.rand(batch.shape)
 
             self.log.info("batch: " + str(i))
 
@@ -306,17 +306,24 @@ class Trainer(object):
 
                         prev_batch = curr_batch.clone()
 
-                        curr_batch = curr_batch + (step_size/2)*energy_gradient + (step_size**0.5)*noise
+                        curr_batch = curr_batch + (step_size/2)*energy_gradient + torch.sqrt(2*step_size)*noise
 
-                        if step%self.args.sampling_log_freq==0:
-                          self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        if self.args.clamp:
+                            curr_batch = torch.clamp(curr_batch,0.0,1.0)
+
+                        grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
+                        image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
+                        noise_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
+
+                        if step > 0 and step%self.args.sampling_log_freq==0:
+                          self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\nImage Norm: " + str() + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
                 while step < self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
                 
 
                     if self.args.model_objective == 'score':
-                        energy_gradient = self.model(curr_batch)  
+                        energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()
 
                     else:
                         energy = self.model(curr_batch)
@@ -333,15 +340,24 @@ class Trainer(object):
     #                    print("vanilla")
                         curr_batch = curr_batch + self.args.step_lr * energy_gradient
                     elif self.args.sampling_strategy == 'langevin':
-                        curr_batch = curr_batch + (self.args.step_lr/2) * energy_gradient + (self.args.step_lr**0.5)*torch.normal(mean=0,std=1,size=energy_gradient.size())
+                        curr_batch = curr_batch + (self.args.step_lr/2) * energy_gradient + ((2*self.args.step_lr)**0.5)*torch.normal(mean=0,std=1,size=energy_gradient.size())
 
                     self.args.step_lr = self.args.step_lr * self.args.lr_anneal
 
-                    if step%self.args.sampling_log_freq==0:
+                    if self.args.clamp:
+                        self.log.info(str(torch.unique(curr_batch)))
+                        curr_batch = torch.clamp(curr_batch,0.0,1.0)
+                        self.log.info(str(torch.unique(curr_batch)))
+
+                    if step > 0 and step%self.args.sampling_log_freq==0:
                       self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
                     
                     step += 1 
-            self.log.info(str(torch.unique(curr_batch)))
+
+            if self.args.clamp:
+                self.log.info(str(torch.unique(curr_batch)))
+                curr_batch = torch.clamp(curr_batch,0.0,1.0)
+                self.log.info(str(torch.unique(curr_batch)))
             all_samples.append(curr_batch.detach())
             # norm_batch = (curr_batch - np.min(curr_batch))
             

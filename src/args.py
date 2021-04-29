@@ -33,6 +33,7 @@ parser.add_argument('--distance-metric', default='l2', type=str, choices = ['l2'
 # training params
 parser.add_argument("--batch-size", type=int, default=64, help="number of images per minibatch")
 parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+
 # parser.add_argument("--grad-clip", type=float, default=0.5, help="gradient clip")
 # parser.add_argument("--weight-decay", type=float, default=1e-5, help="weight decay for training")
 parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
@@ -43,6 +44,7 @@ parser.add_argument("--selection-num-samples", type=int, default=1000, help="num
 parser.add_argument("--fid-layer", type=int, default=-1, help="which layer to use for activations")
 
 # Sampling options
+parser.add_argument('--clamp', action='store_true', help='clamp values after each step to [0,1]')
 parser.add_argument("--ntest", type=int, default=1000, help="no of samples to generate")
 parser.add_argument("--save-nsamples", type=int, default=100, help="store generated images")
 parser.add_argument("--sampling-log-freq", type=int, default=99, help="frequency of logging during sampling")
