@@ -63,12 +63,12 @@ class Trainer(object):
             fid_stats = np.load(f)
             self.fid_mean = fid_stats['mean']
             self.fid_covar = fid_stats['covar']
-            print(self.fid_mean.shape,self.fid_covar.shape)
+            # print(self.fid_mean.shape,self.fid_covar.shape)
         else:
             self.fid_mean, self.fid_covar = self.get_representative_stats('valid')
             f = open(fname,'wb+')
             np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
-            print(self.fid_mean.shape,self.fid_covar.shape)
+            # print(self.fid_mean.shape,self.fid_covar.shape)
 
         self.model.to(self.args.device)
             
@@ -278,8 +278,6 @@ class Trainer(object):
 
             # batch = batch.to(self.args.device)
             
-            step = 0
-
             noise = torch.randn_like(batch)#torch.normal(mean=0,std=1,size=batch.size())#.to(self.args.device)
 
             if self.args.init_value == 'uniform':
@@ -322,7 +320,7 @@ class Trainer(object):
                           self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\nImage Norm: " + str() + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
-                while step < self.args.max_step and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
+                for step in range(self.args.max_step):# and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
                 
 
                     if self.args.model_objective == 'score':
@@ -355,7 +353,6 @@ class Trainer(object):
                     if step > 0 and step%self.args.sampling_log_freq==0:
                       self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
                     
-                    step += 1 
 
             if self.args.clamp:
                 self.log.info(str(torch.unique(curr_batch)))
@@ -378,7 +375,7 @@ class Trainer(object):
             nsample = save_samples[i]*255
             cv2.imwrite(self.args.isave_dir + str(i) + ".jpg", nsample)
 
-        print(torch.unique(all_samples))
+        # print(torch.unique(all_samples))
         all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0]-torch.min(all_samples,dim=0)[0])
         all_samples = (all_samples * 2)-1
         mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
