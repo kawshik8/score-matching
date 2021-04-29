@@ -41,9 +41,9 @@ class Trainer(object):
         self.tloader = {'train':self.train_loader, 'valid':self.val_loader, 'test': self.test_loader}
 
         if 'sgd' in args.optimizer:
-            self.optimizer = torch.optim.SGD(self.model.parameters(), lr = args.lr, momentum = 0.9 if "mom" in args.optimizer else 0)
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr = args.lr, momentum = 0.9 if "mom" in args.optimizer else 0, weight_decay= args.weight_decay)
         elif args.optimizer == 'adam':
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr = args.lr)
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr = args.lr, weight_decay= args.weight_decay)
 
         self.sampling_trainloader = DataLoader(self.train_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
         self.sampling_valloader = DataLoader(self.val_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
@@ -51,7 +51,7 @@ class Trainer(object):
         self.sloader = {'train':self.sampling_trainloader, 'valid':self.sampling_valloader, 'test': self.sampling_testloader}
 
         self.log = create_logger(__name__, silent=False, to_disk=True,
-                                 log_file=args.model_dir + "log.txt")
+                                 log_file=args.model_dir + ("test_log.txt" if args.test_model else "log.txt"))
         self.log.info("Setup trainer for %s" % args.dataset)
 
         tensorboard_log_dir = os.path.join(args.model_dir, 'tensorboard/tb_log.info')
@@ -268,6 +268,8 @@ class Trainer(object):
 
         all_samples = []
         ns = 0
+
+        self.log.info(str(self.args.sampling_strategy) + " Sampling\n")
 
         # with tqdm(total=num_samples) as progress:
         for i, batch in enumerate(data_loader):
