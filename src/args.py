@@ -74,14 +74,18 @@ def process_args():
     args = parser.parse_args()
 
     if args.test_model:
-        config = json.load(open(args.load_mdir + "/config.json",'r'))
-        
-        for group in config:
-            if group == 'model':
-                for key in config[group]:
-                    setattr(args,key,config[group][key])
-    else:
+        if not os.path.exists(args.load_mdir + "/config.json"):
+            print("Make sure you use similar model params to the one used during training")
+            
+        else:
+            config = json.load(open(args.load_mdir + "/config.json",'r'))
+            
+            for group in config:
+                if group == 'model':
+                    for key in config[group]:
+                        setattr(args,key,config[group][key])
 
+    else:
         if args.mfile is None:
             print("Please give a name for the experiment")
             exit(0)
