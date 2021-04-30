@@ -35,7 +35,7 @@ train_parser.add_argument("--lr", type=float, default=1e-3, help="learning rate"
 train_parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
 train_parser.add_argument("--early-stop-patience", type=int, default=10, help="number of epochs to wait for val loss to decrease before training stops early")
 train_parser.add_argument("--optimizer", type=str, default='adam', choices=['sgd','sgd_mom','adam'], help="optimization strategy")
-train_parser.add_argument("--scheduler", type=str, default='reduce_plateau', choices=['reduce_plateau','sgd_mom','adam'], help="optimization strategy")
+train_parser.add_argument("--scheduler", type=str, default=None, choices=['reduce_plateau','sgd_mom','adam'], help="optimization strategy")
 train_parser.add_argument("--model-selection", type=str, default='train', choices=['train','sampling'], help="strategy to select best model")
 train_parser.add_argument("--selection-num-samples", type=int, default=1000, help="number of images to sample for selecting best model")
 train_parser.add_argument("--fid-layer", type=int, default=-1, help="which layer to use for activations")

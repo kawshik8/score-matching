@@ -45,7 +45,7 @@ class Trainer(object):
         elif args.optimizer == 'adam':
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr = args.lr, weight_decay= args.weight_decay)
 
-        if args.scheduler == 'reduce_plateau':
+        if args.scheduler and args.scheduler == 'reduce_plateau':
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=4, threshold=0.0001, threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-08, verbose=True)
 
         self.sampling_trainloader = DataLoader(self.train_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
