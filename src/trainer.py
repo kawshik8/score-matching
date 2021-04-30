@@ -45,8 +45,11 @@ class Trainer(object):
         elif args.optimizer == 'adam':
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr = args.lr, weight_decay= args.weight_decay)
 
-        if args.scheduler and args.scheduler == 'reduce_plateau':
-            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=4, threshold=0.0001, threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-08, verbose=True)
+        if args.scheduler:
+            if args.scheduler == 'reduce_plateau':
+                self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=self.args.reduce_lr_factor, patience=self.args.reduce_lr_patience, threshold=0.0001, threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-08, verbose=True)
+            elif args.scheduler == 'one_cycle':
+                self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, args.lr, epochs=args.n_epochs, steps_per_epoch=len(self.train_loader), pct_start=self.args.cycle_pct, anneal_strategy='cos', cycle_momentum=True, base_momentum=0.85, max_momentum=0.95, div_factor=25.0, final_div_factor=100.0, three_phase=False, last_epoch=-1, verbose=True)
 
         self.sampling_trainloader = DataLoader(self.train_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
         self.sampling_valloader = DataLoader(self.val_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
@@ -189,6 +192,10 @@ class Trainer(object):
             progress.update(len(batch))
             progress.set_postfix(loss=loss.item(),noise_loss=[x.item() for x in all_losses])
 
+            if self.args.scheduler:
+                if self.args.scheduler == 'one_cycle':
+                    self.scheduler.step()
+
         return np.mean(total_losses)    
 
 
@@ -209,6 +216,10 @@ class Trainer(object):
 
             eval_loss = self.train_test('eval', 'valid', epoch)
             self.writer.add_scalar('eval_val-set/epoch_loss', train_loss, epoch)
+
+            if self.args.scheduler:
+                if self.args.scheduler == 'reduce_plateau':
+                    self.scheduler.step(eval_loss)
 
             self.log.info("\t\tTrain Loss: " + str(train_loss) + "\n\t\tVal Loss: " + str(eval_loss))
 

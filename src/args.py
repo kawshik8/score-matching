@@ -35,7 +35,13 @@ train_parser.add_argument("--lr", type=float, default=1e-3, help="learning rate"
 train_parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
 train_parser.add_argument("--early-stop-patience", type=int, default=10, help="number of epochs to wait for val loss to decrease before training stops early")
 train_parser.add_argument("--optimizer", type=str, default='adam', choices=['sgd','sgd_mom','adam'], help="optimization strategy")
-train_parser.add_argument("--scheduler", type=str, default=None, choices=['reduce_plateau','sgd_mom','adam'], help="optimization strategy")
+train_parser.add_argument("--scheduler", type=str, default=None, choices=['reduce_plateau','one_cycle'], help="lr schedule strategy")
+###
+train_parser.add_argument("--reduce-lr-patience", type=int, default=4, help="patience for reduce lr on plateau")
+train_parser.add_argument("--reduce-lr-factor", type=float, default=0.5, help="factor for reduce lr on plateau")
+###
+train_parser.add_argument("--cycle-pct", type=float, default=0.2, help="pct factor for one cycle lr")
+###
 train_parser.add_argument("--model-selection", type=str, default='train', choices=['train','sampling'], help="strategy to select best model")
 train_parser.add_argument("--selection-num-samples", type=int, default=1000, help="number of images to sample for selecting best model")
 train_parser.add_argument("--fid-layer", type=int, default=-1, help="which layer to use for activations")
@@ -76,7 +82,7 @@ def process_args():
     if args.test_model:
         if not os.path.exists(args.load_mdir + "/config.json"):
             print("Make sure you use similar model params to the one used during training")
-            
+
         else:
             config = json.load(open(args.load_mdir + "/config.json",'r'))
             
