@@ -91,6 +91,8 @@ def process_args():
                     for key in config[group]:
                         setattr(args,key,config[group][key])
 
+        args.model_dir = args.load_mdir + "/"
+
     else:
         if args.mfile is None:
             print("Please give a name for the experiment")
@@ -138,12 +140,12 @@ def process_args():
 
     config = arg_groups
     json_file = json.dumps(config)
-    f = open((args.model_dir if not args.test_model else args.load_mdir) + "/" + ("config.json" if not args.test_model else "test_config.json"),"w+")
+    f = open(args.model_dir + "/" + ("config.json" if not args.test_model else "test_config.json"),"w+")
     f.write(json_file)
     f.close()
 
     if args.test_model:
-        args.model_dir = args.load_mdir
+        
         args.load_mdir += "/" + args.ckpt_type + ".ckpt"
         
     
