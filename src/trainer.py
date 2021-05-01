@@ -58,10 +58,10 @@ class Trainer(object):
 
         if args.test_model:
             fname = "test_log"
-            if os.path.exists(args.model_dir + fname + ".txt"):
+            if os.path.exists(args.load_mdir + "/" + fname + ".txt"):
                 fno = 1
                 fnamet = fname + "_" + str(fno)
-                while os.path.exists(args.model_dir + fnamet + ".txt"):
+                while os.path.exists(args.load_mdir+ "/" + fnamet + ".txt"):
                     fno += 1
                     fnamet = fname + "_" + str(fno)
                 fname = fname + "_" + str(fno) + ".txt"
@@ -274,7 +274,7 @@ class Trainer(object):
             print("load model directory is None")
             exit(0)
         else:
-            self.model.load_state_dict(torch.load(args.load_mdir))
+            self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ".ckpt"))
 
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
@@ -302,7 +302,7 @@ class Trainer(object):
 
             # batch = batch.to(self.args.device)
             
-            noise = torch.randn_like(batch)#torch.normal(mean=0,std=1,size=batch.size())#.to(self.args.device)
+            #torch.normal(mean=0,std=1,size=batch.size())#.to(self.args.device)
 
             if self.args.init_value == 'uniform':
                 curr_batch = torch.rand(batch.shape)
@@ -316,6 +316,8 @@ class Trainer(object):
                     step_size = args.step_lr * ((noise_level**2)/(self.args.noise_std[-1]**2))
                     for step in range(self.args.max_step):
                         
+                        noise = torch.randn_like(batch)
+
                         if self.args.model_objective == 'score':
                             energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()
 
@@ -341,12 +343,13 @@ class Trainer(object):
                         noise_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
 
                         if step > 0 and step%self.args.sampling_log_freq==0:
-                          self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\nImage Norm: " + str() + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                            self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\nImage Norm: " + str() + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
                 for step in range(self.args.max_step):# and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
                 
-
+                    noise = torch.randn_like(batch)
+                    
                     if self.args.model_objective == 'score':
                         energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()
 
@@ -358,14 +361,22 @@ class Trainer(object):
                                                                 create_graph=True, retain_graph=True, only_inputs=True)[0]
 
                     
+                    if self.args.reweight:
+                        energy_gradient = energy_gradient / float(self.args.noise_std[0])
 
                     prev_batch = curr_batch.clone()
 
+                    if self.args.step_grad_choice == 'pgrad':
+                        step_grad = -(curr_batch - batch)
+                        if self.args.reweight:
+                            step_grad = step_grad/(float(self.args.noise_std[0])**2)
+                    elif self.args.step_grad_choice == 'rgrad':
+                        step_grad = energy_gradient
+
                     if self.args.sampling_strategy == 'vanilla':
-    #                    print("vanilla")
-                        curr_batch = curr_batch + self.args.step_lr * energy_gradient
+                        curr_batch = curr_batch + self.args.step_lr * step_grad
                     elif self.args.sampling_strategy == 'langevin':
-                        curr_batch = curr_batch + (self.args.step_lr/2) * energy_gradient + ((2*self.args.step_lr)**0.5)*torch.normal(mean=0,std=1,size=energy_gradient.size())
+                        curr_batch = curr_batch + (self.args.step_lr/2) * step_grad + torch.sqrt(2*self.args.step_lr) * noise
 
                     self.args.step_lr = self.args.step_lr * self.args.lr_anneal
 
@@ -375,7 +386,7 @@ class Trainer(object):
                         self.log.info(str(torch.unique(curr_batch)))
 
                     if step > 0 and step%self.args.sampling_log_freq==0:
-                      self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
                     
 
             if self.args.clamp:
@@ -397,11 +408,12 @@ class Trainer(object):
         save_samples = np.transpose(all_samples[idx].numpy(),(0,2,3,1))
         for i in range(len(save_samples)):
             nsample = save_samples[i]*255
-            cv2.imwrite(self.args.isave_dir + str(i) + ".jpg", nsample)
+            cv2.imwrite((self.args.isave_dir if not args.test_model else self.args.tsave_dir) + str(i) + ".jpg", nsample)
 
         # print(torch.unique(all_samples))
-        all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0]-torch.min(all_samples,dim=0)[0])
-        all_samples = (all_samples * 2)-1
+        if self.args.renormalize:
+            all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0] - torch.min(all_samples,dim=0)[0])
+        all_samples = (all_samples * 2) - 1
         mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
         # print(mean_inception,std_inception,fid)
         return mean_inception,fid
