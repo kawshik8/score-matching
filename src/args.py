@@ -143,7 +143,9 @@ def process_args():
     f.close()
 
     if args.test_model:
+        args.model_dir = args.load_mdir
         args.load_mdir += "/" + args.ckpt_type + ".ckpt"
+        
     
     return args
 
