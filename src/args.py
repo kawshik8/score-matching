@@ -98,10 +98,13 @@ def process_args():
             print("Please give a name for the experiment")
             exit(0)
         elif os.path.exists(args.model_dir + args.mfile):
-            for i in range(100):
-                args.mfile = args.mfile + '_' + str(i)
-                if not os.path.exists(args.model_dir + args.mfile):
-                    break
+            i=0
+            mfile = args.mfile + '_' + str(i)
+            while os.path.exists(args.model_dir + mfile):
+                i+=1 
+                mfile = args.mfile + '_' + str(i)
+                                   
+            args.mfile = args.mfile + '_' + str(i)
 
     arg_groups={}
 
@@ -140,7 +143,17 @@ def process_args():
 
     config = arg_groups
     json_file = json.dumps(config)
-    f = open(args.model_dir + "/" + ("config.json" if not args.test_model else "test_config.json"),"w+")
+    if args.test_model:
+        config_file = "test_config.json"
+        if os.path.exists(args.model_dir + "/" + config_file):
+            fno = 1
+            config_filet = config_file + "_" + str(fno)
+            while os.path.exists(args.model_dir + "/" + config_filet):
+                fno += 1
+                config_filet = config_file + "_" + str(fno)
+            config_file = config_file + "_" + str(fno)
+
+    f = open(args.model_dir + "/" + ("config.json" if not args.test_model else config_file),"w+")
     f.write(json_file)
     f.close()
 

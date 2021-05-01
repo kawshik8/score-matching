@@ -56,8 +56,18 @@ class Trainer(object):
         self.sampling_testloader = DataLoader(self.test_data, batch_size = args.sampling_batch_size, shuffle=True, num_workers = args.num_workers)
         self.sloader = {'train':self.sampling_trainloader, 'valid':self.sampling_valloader, 'test': self.sampling_testloader}
 
+        if args.test_model:
+            fname = "test_log"
+            if os.path.exists(args.model_dir + fname + ".txt"):
+                fno = 1
+                fnamet = fname + "_" + str(fno)
+                while os.path.exists(args.model_dir + fnamet + ".txt"):
+                    fno += 1
+                    fnamet = fname + "_" + str(fno)
+                fname = fname + "_" + str(fno) + ".txt"
+
         self.log = create_logger(__name__, silent=False, to_disk=True,
-                                 log_file=args.model_dir + ("test_log.txt" if args.test_model else "log.txt"))
+                                 log_file=args.model_dir + (fname if args.test_model else "log.txt"))
         self.log.info("Setup trainer for %s" % args.dataset)
 
         tensorboard_log_dir = os.path.join(args.model_dir, 'tensorboard/tb_log.info')
