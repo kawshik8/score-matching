@@ -47,7 +47,7 @@ class Data(Dataset):
 
             self.images = data
 
-        self.transforms = transforms.Compose([transforms.ToTensor()])        
+        self.transforms = transforms.Compose(([transforms.ToTensor()] if args.dataset!='mnist' else [transforms.Resize((32,32), interpolation=2),transforms.ToTensor()]))        
 
     def get_data(self, dataset_name):
         if dataset_name == 'cifar10':
@@ -72,6 +72,11 @@ class Data(Dataset):
 if __name__ == '__main__':
     args = process_args()
     images = Data(args,'train')
+    print(len(images))
+    images = Data(args,'valid')
+    print(len(images))
+    images = Data(args,'test')
+    print(len(images))
     loader = DataLoader(images, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     for i,batch in enumerate(loader):
         print(i,batch.shape)

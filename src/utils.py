@@ -18,7 +18,7 @@ from scipy import linalg
 EPSILON = 1e-8
 
 ################ ~ 9.35 +/- 0.53 for cifar 10 with 5000 original images and splits = 10
-def inception_score(inception_model, images, cuda=True, batch_size=32, resize=True, splits=10, fid_mean=0, fid_covar=0): 
+def inception_score(inception_model, images, cuda=True, batch_size=32, resize=True, splits=10, fid_mean=0, fid_covar=0, mnist=False): 
     """Computes the inception score of the generated images image_set
     image_set -- Torch dataset of (3xHxW) numpy images normalized in the range [-1, 1]
     cuda -- whether or not to run on GPU
@@ -48,6 +48,8 @@ def inception_score(inception_model, images, cuda=True, batch_size=32, resize=Tr
     def get_pred(x):
         if resize:
             x = up(x)
+            if mnist:
+                x = torch.stack([x,x,x],dim=1)
         features, logits = inception_model(x)
         return features.detach().data.cpu().numpy(), F.softmax(logits,dim=-1).detach().data.cpu().numpy()
 

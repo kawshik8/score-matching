@@ -23,9 +23,9 @@ class Trainer(object):
         self.args = args
 
         if args.model_objective == 'score':
-            self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block)
+            self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3))
         elif args.model_objective == 'energy':
-            self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block)
+            self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3))
 
         self.inception = Inception(args.fid_layer).eval()
         
@@ -137,7 +137,7 @@ class Trainer(object):
         data_loader = self.tloader[split]
         total_losses = []
 
-        with tqdm(total=len(data_loader.dataset)) as progress:
+        with (torch.enable_grad() if what=='train' else torch.no_grad()), tqdm(total=len(data_loader.dataset)) as progress:
           for i, batch in enumerate(data_loader):
 
             step = epoch * len(data_loader) + i
@@ -329,7 +329,7 @@ class Trainer(object):
 
                         grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
                         image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
-                        noise_norm = torch.norm(curr_batch.view(noise.size(0),-1),dim=1).mean()
+                        noise_norm = torch.norm(noise.view(noise.size(0),-1),dim=1).mean()
                         snr = ((step_size / 2.)**0.5) * grad_norm / noise_norm
                         grad_mean_norm = torch.norm(energy_gradient.mean(dim=0).view(-1)) ** 2 * noise_level ** 2
 
@@ -368,9 +368,26 @@ class Trainer(object):
 
                     if self.args.sampling_strategy == 'vanilla':
                         curr_batch = curr_batch + self.args.step_lr * step_grad
+
+                        grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
+                        image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
+                        grad_mean_norm = torch.norm(energy_gradient.mean(dim=0).view(-1)) ** 2 * noise_level ** 2
+
+                        if step > 0 and step%self.args.sampling_log_freq==0:
+                            self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\tImage Norm: " + str(image_norm) + "\ngrad mean norm: " + str(grad_mean_norm) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+
                     elif self.args.sampling_strategy == 'langevin':
                         curr_batch = curr_batch + (self.args.step_lr/2) * step_grad + ((2*self.args.step_lr)**0.5) * noise
+                        
+                        grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
+                        image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
+                        noise_norm = torch.norm(noise.view(noise.size(0),-1),dim=1).mean()
+                        snr = ((step_size / 2.)**0.5) * grad_norm / noise_norm
+                        grad_mean_norm = torch.norm(energy_gradient.mean(dim=0).view(-1)) ** 2 * noise_level ** 2
 
+                        if step > 0 and step%self.args.sampling_log_freq==0:
+                            self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\tImage Norm: " + str(image_norm) + "\tNoise norm: " + str(noise_norm) + "\nsnr: " + str(snr) + "\tgrad mean norm: " + str(grad_mean_norm) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+           
                     self.args.step_lr = self.args.step_lr * self.args.lr_anneal
 
                     if self.args.clamp:
@@ -378,8 +395,10 @@ class Trainer(object):
                         curr_batch = torch.clamp(curr_batch,0.0,1.0)
                         self.log.info(str(torch.unique(curr_batch)))
 
-                    if step > 0 and step%self.args.sampling_log_freq==0:
-                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                    
+
+
+                    
                     
 
             if self.args.clamp:
@@ -401,13 +420,13 @@ class Trainer(object):
         save_samples = np.transpose(all_samples[idx].numpy(),(0,2,3,1))
         for i in range(len(save_samples)):
             nsample = save_samples[i]*255
-            cv2.imwrite((self.args.isave_dir if not args.test_model else self.args.tsave_dir) + str(i) + ".jpg", nsample)
+            cv2.imwrite((self.args.isave_dir if not self.args.test_model else self.args.tsave_dir) + str(i) + ".jpg", nsample)
 
         # print(torch.unique(all_samples))
         if self.args.renormalize:
             all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0] - torch.min(all_samples,dim=0)[0])
         all_samples = (all_samples * 2) - 1
-        mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar)
+        mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar, mnist=(self.args.dataset=='mnist'))
         # print(mean_inception,std_inception,fid)
         return mean_inception,fid
             
