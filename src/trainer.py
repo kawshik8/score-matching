@@ -104,6 +104,8 @@ class Trainer(object):
         loader = DataLoader(self.data[split], batch_size = 8, shuffle=True, num_workers = args.num_workers)
         for i,batch in enumerate(loader):
             batch = batch.to(self.args.device)
+            if self.args.datast == 'mnist':
+                x = torch.stack([x,x,x],dim=1)
             batch = (batch - torch.min(batch,dim=0)[0])/(torch.max(batch,dim=0)[0] - torch.min(batch,dim=0)[0])
             batch = (batch * 2) - 1
             # if i%10==0:
