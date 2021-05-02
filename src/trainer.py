@@ -344,7 +344,7 @@ class Trainer(object):
 
                         grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
                         image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
-                        noise_norm = torch.norm(curr_batch.view(noise.size(0),-1),dim=1).mean()
+                        noise_norm = torch.norm(noise.view(noise.size(0),-1),dim=1).mean()
                         snr = ((step_size / 2.)**0.5) * grad_norm / noise_norm
                         grad_mean_norm = torch.norm(energy_gradient.mean(dim=0).view(-1)) ** 2 * noise_level ** 2
 
@@ -414,9 +414,10 @@ class Trainer(object):
 
         idx = torch.randperm(all_samples.size(0))[:self.args.save_nsamples]
         save_samples = np.transpose(all_samples[idx].numpy(),(0,2,3,1))
+        #print(len(save_samples),self.args.tsave_dir,
         for i in range(len(save_samples)):
             nsample = save_samples[i]*255
-            cv2.imwrite((self.args.isave_dir if not args.test_model else self.args.tsave_dir) + str(i) + ".jpg", nsample)
+            cv2.imwrite((self.args.isave_dir if not self.args.test_model else self.args.tsave_dir) + str(i) + ".jpg", nsample)
 
         # print(torch.unique(all_samples))
         if self.args.renormalize:
