@@ -141,25 +141,29 @@ def process_args():
         l = int(l)
         a = float(std1)
         al = float(stdl) 
-        args.noise_std = np.exp(np.linspace(np.log(a),np.log(al),l))
+        args.noise_std = np.exp(np.linspace(np.log(a),np.log(al),l)).tolist()
 
     config = arg_groups
     json_file = json.dumps(config)
     if args.test_model:
-        config_file = "test_config.json"
+        config_file = "test_config"
         tsave = "timages"
-        if os.path.exists(args.load_mdir + "/" + config_file):
+        if os.path.exists(args.load_mdir + "/" + config_file + ".json"):
             fno = 1
             config_filet = config_file + "_" + str(fno)
-            while os.path.exists(args.load_mdir + "/" + config_filet):
+            while os.path.exists(args.load_mdir + "/" + config_filet + ".json"):
                 fno += 1
                 config_filet = config_file + "_" + str(fno)
-            config_file = config_file + "_" + str(fno)
+            config_file = config_filet# + ".json"
 
             tsave = tsave + "_" + str(fno)
-
-        args.tsave_dir = args.model_dor + "/" + tsave
+        config_file += ".json"
+ 
+        print(config_file, args.tsave_dir,tsave)
+        args.tsave_dir = args.load_mdir + "/" + tsave + "/"
         os.mkdir(args.tsave_dir)
+
+        print(config_file, args.tsave_dir,tsave)
 
     f = open((args.model_dir if not args.test_model else args.load_mdir) + "/" + ("config.json" if not args.test_model else config_file),"w+")
     f.write(json_file)
@@ -167,7 +171,7 @@ def process_args():
 
     if args.test_model:
         
-        args.model_dir = args.load_mdir 
+        args.model_dir = args.load_mdir + "/" 
         
     
     return args

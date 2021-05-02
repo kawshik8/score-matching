@@ -64,7 +64,10 @@ class Trainer(object):
                 while os.path.exists(args.load_mdir+ "/" + fnamet + ".txt"):
                     fno += 1
                     fnamet = fname + "_" + str(fno)
-                fname = fname + "_" + str(fno) + ".txt"
+                fname += "_" + str(fno)
+            fname += ".txt"
+
+            print(fname)
 
         self.log = create_logger(__name__, silent=False, to_disk=True,
                                  log_file=args.model_dir + (fname if args.test_model else "log.txt"))
@@ -333,17 +336,20 @@ class Trainer(object):
 
                         prev_batch = curr_batch.clone()
 
-                        curr_batch = curr_batch + (step_size/2)*energy_gradient + torch.sqrt(2*step_size)*noise
+                  #      print(type(step_size),type(args.step_lr),type(noise_level),type(self.args.noise_std[-1]))
+                        curr_batch = curr_batch + (step_size/2)*energy_gradient + ((2*step_size)**0.5)*noise
 
                         if self.args.clamp:
                             curr_batch = torch.clamp(curr_batch,0.0,1.0)
 
                         grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
                         image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
-                        noise_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
+                        noise_norm = torch.norm(curr_batch.view(noise.size(0),-1),dim=1).mean()
+                        snr = ((step_size / 2.)**0.5) * grad_norm / noise_norm
+                        grad_mean_norm = torch.norm(energy_gradient.mean(dim=0).view(-1)) ** 2 * noise_level ** 2
 
                         if step > 0 and step%self.args.sampling_log_freq==0:
-                            self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\nImage Norm: " + str() + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                            self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\tImage Norm: " + str(image_norm) + "\tNoise norm: " + str(noise_norm) + "\nsnr: " + str(snr) + "\tgrad mean norm: " + str(grad_mean_norm) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
             else:
                 for step in range(self.args.max_step):# and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
@@ -373,10 +379,12 @@ class Trainer(object):
                     elif self.args.step_grad_choice == 'rgrad':
                         step_grad = energy_gradient
 
+                    print(torch.norm(step_grad.view(step_grad.size(0),-1),-1), torch.norm(energy_gradient.view(step_grad.size(0),-1),-1))
+
                     if self.args.sampling_strategy == 'vanilla':
                         curr_batch = curr_batch + self.args.step_lr * step_grad
                     elif self.args.sampling_strategy == 'langevin':
-                        curr_batch = curr_batch + (self.args.step_lr/2) * step_grad + torch.sqrt(2*self.args.step_lr) * noise
+                        curr_batch = curr_batch + (self.args.step_lr/2) * step_grad + ((2*self.args.step_lr)**0.5) * noise
 
                     self.args.step_lr = self.args.step_lr * self.args.lr_anneal
 
@@ -386,7 +394,7 @@ class Trainer(object):
                         self.log.info(str(torch.unique(curr_batch)))
 
                     if step > 0 and step%self.args.sampling_log_freq==0:
-                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient,dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+                        self.log.info("step: " + str(step) + "\nPredicted gradient: " + str(torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
                     
 
             if self.args.clamp:
