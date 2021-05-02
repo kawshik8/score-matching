@@ -139,62 +139,47 @@ class Trainer(object):
 
         with tqdm(total=len(data_loader.dataset)) as progress:
           for i, batch in enumerate(data_loader):
-#            print(i,batch.shape)
-#            if i > 5:
-#                break
+
             step = epoch * len(data_loader) + i
             batch = batch.to(self.args.device)
 
-            all_losses = []
-            for noise_level in self.args.noise_std:
-                noise = torch.randn_like(batch).to(self.args.device)#torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
+            noise_idx = torch.randint(0, len(self.args.noise_std), shape=(batch.size(0),), device=batch.device)
+            noise_levels = self.args.noise_std[noise_idx].view(batch.size(0),*([1]*len(batch.shape[1:])))
 
-                noisy_batch = batch + noise 
+            noise = torch.randn_like(batch).to(self.args.device) * noise_levels #torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
 
-                image_diff = - (noisy_batch - batch)
+            noisy_batch = batch + noise 
 
-                if self.args.reweight:
-                    # if len(self.args.noise_std) > 1:
-                    #     image_diff = image_diff / noise_level
-                    # else:
-                        image_diff = image_diff / (noise_level**2)
+            image_diff = - noise
 
-                if self.args.model_objective == 'score':
-                    energy_gradient = self.model(noisy_batch)                        
+            if self.args.reweight:
+                image_diff = image_diff / (noise_levels**2)
 
-                else:
-                    energy = self.model(noisy_batch)
-                    noisy_batch.requires_grad = True
-                    energy_gradient = torch.autograd.grad(outputs=energy.sum(), inputs=noisy_batch, create_graph=True)[0]
+            if self.args.model_objective == 'score':
+                energy_gradient = self.model(noisy_batch)                        
 
-                    self.writer.add_scalar(what + "_" + split + '-set/energy_batch_noise-' + str(noise_level), energy.mean(), step)
+            else:
+                energy = self.model(noisy_batch)
+                noisy_batch.requires_grad = True
+                energy_gradient = torch.autograd.grad(outputs=energy.sum(), inputs=noisy_batch, create_graph=True)[0]
 
-                self.writer.add_scalar(what + "_" + split + '-set/energy_gradient_l2norm_batch_noise-' + str(noise_level), torch.norm(energy_gradient,dim=1).mean(), step)
+                self.writer.add_scalar(what + "_" + split + '-set/energy_batch', energy.mean(), step)
 
-                if self.args.reweight:
-                    # if len(self.args.noise_std) == 1:
-                        energy_gradient = energy_gradient/noise_level
+            self.writer.add_scalar(what + "_" + split + '-set/energy_gradient_norm_batch', torch.norm(energy_gradient.view(batch.size(0),-1),dim=1).mean(), step)
 
-                if len(self.args.noise_std) > 1 and self.args.reweight:
-                    loss = (1/2.) * ((energy_gradient.view(energy_gradient.shape[0], -1) - image_diff.view(image_diff.shape[0],-1))**2).sum(dim=-1) * noise_level **2
-                    loss = loss.mean(dim=0)
-                else:
-                    loss = (1/2.) * ((energy_gradient.view(energy_gradient.shape[0], -1) - image_diff.view(image_diff.shape[0],-1))**2).sum(dim=-1).mean(dim=0)
+            if self.args.reweight:
+                energy_gradient = energy_gradient/noise_levels
+
+            energy_gradient = energy_gradient.view(energy_gradient.shape[0], -1)
+            image_diff = image_diff.view(image_diff.shape[0],-1)
+
+            if len(self.args.noise_std) > 1 and self.args.reweight:
+                loss = (1/2.) * ((energy_gradient - image_diff)**2).sum(dim=-1) * noise_levels.squeeze() **2
+                loss = loss.mean(dim=0)
+            else:
+                loss = (1/2.) * ((energy_gradient - image_diff)**2).sum(dim=-1).mean(dim=0)
                 
-
-                self.writer.add_scalar(what + "_" + split + '-set/loss_batch_noise-' + str(noise_level), loss, step)  
-
-                all_losses.append(loss)
-
-            #    if i%200 == 0:
-            #        self.log.info("ministep: " + str(i) + " noise std: " + str(noise_level) + " Loss: " + str(loss.item()) + " energy grad norm: " + str(torch.norm(energy_gradient,dim=1).mean().item()) + " image diff norm: " + str(torch.norm(image_diff,dim=1).mean().item()))
- #               print(i, loss, torch.norm(energy_gradient,dim=1).mean(), torch.norm(image_diff,dim=1).mean())
-
-            loss = torch.stack(all_losses).mean().to(self.args.device)
-            self.writer.add_scalar(what + "_" + split + '-set/total_loss_batch', loss, step)
-
-            #if i%200==0:
-            #    self.log.info("total loss: " + str(loss.item()))
+            self.writer.add_scalar(what + "_" + split + '-set/loss_batch', loss, step)
 
             if what == 'train':
                 self.optimizer.zero_grad()
@@ -203,7 +188,7 @@ class Trainer(object):
 
             total_losses.append(loss.detach().cpu().numpy())
             progress.update(len(batch))
-            progress.set_postfix(loss=loss.item(),noise_loss=[x.item() for x in all_losses])
+            progress.set_postfix(loss=loss.item())
 
             if self.args.scheduler:
                 if self.args.scheduler == 'one_cycle':
