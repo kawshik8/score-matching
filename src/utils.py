@@ -27,8 +27,8 @@ def inception_score(inception_model, images, cuda=True, batch_size=32, resize=Tr
     """
     N = len(images)
 
-    assert batch_size > 0
-    assert N > batch_size
+    #assert batch_size > 0
+    #assert N > batch_size
 
     # Set up dtype
     if cuda:
@@ -49,7 +49,7 @@ def inception_score(inception_model, images, cuda=True, batch_size=32, resize=Tr
         if resize:
             x = up(x)
             if mnist:
-                x = torch.stack([x,x,x],dim=1)
+                x = torch.cat([x,x,x],dim=1)
         features, logits = inception_model(x)
         return features.detach().data.cpu().numpy(), F.softmax(logits,dim=-1).detach().data.cpu().numpy()
 
@@ -69,6 +69,9 @@ def inception_score(inception_model, images, cuda=True, batch_size=32, resize=Tr
 
     mean = np.mean(features,axis=0)
     covar = np.cov(features,rowvar=False)
+
+    print(np.unique(covar))
+    print(np.unique(fid_covar))
 
     fid = calculate_frechet_distance(mean, covar, fid_mean, fid_covar)
 

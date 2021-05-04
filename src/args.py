@@ -25,13 +25,14 @@ model_parser.add_argument("--model-objective", type=str, default="score", choice
 model_parser.add_argument("--unet-depth", type=int, default=3, help="depth of unet model")
 model_parser.add_argument("--unet-block", type=str, default='conv_block', choices=['conv_block','res_block'], help="depth of unet model")
 model_parser.add_argument("--norm-type", type=str, default='batch', choices=['batch','instance','instance++'], help="depth of unet model")
-model_parser.add_argument('--reweight',type=int,default=1, help='reweight action diff and egrad using variance values')
+#model_parser.add_argument('--reweight',type=int,default=1, help='reweight action diff and egrad using variance values')
 
 # training params
 train_parser = parser.add_argument_group("train","train_opt params")
 train_parser.add_argument("--batch-size", type=int, default=64, help="number of images per minibatch")
 train_parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
 # parser.add_argument("--grad-clip", type=float, default=0.5, help="gradient clip")
+train_parser.add_argument('--reweight',type=int,default=1, help='reweight action diff and egrad using variance values')
 train_parser.add_argument("--n-epochs", type=int, default=100, help="total number of epochs")
 train_parser.add_argument("--early-stop-patience", type=int, default=10, help="number of epochs to wait for val loss to decrease before training stops early")
 train_parser.add_argument("--optimizer", type=str, default='adam', choices=['sgd','sgd_mom','adam'], help="optimization strategy")
@@ -91,6 +92,7 @@ def process_args():
             for group in config:
                 if group == 'model':
                     for key in config[group]:
+                      if key != 'reweight':
                         setattr(args,key,config[group][key])
 
 
@@ -113,7 +115,7 @@ def process_args():
         group_dict={a.dest:getattr(args,a.dest,None) for a in group._group_actions}
         arg_groups[group.title]=group_dict #argparse.Namespace(**group_dict)
 
-    # print(arg_groups)
+    print(arg_groups)
 
     args.reweight = True if args.reweight==1 else False
     args.renormalize = True if args.renormalize ==1 else False

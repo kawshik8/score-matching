@@ -84,7 +84,7 @@ class Trainer(object):
             self.fid_covar = fid_stats['covar']
             # print(self.fid_mean.shape,self.fid_covar.shape)
         else:
-            self.fid_mean, self.fid_covar = self.get_representative_stats('valid')
+            self.fid_mean, self.fid_covar = self.get_representative_stats('train')
             f = open(fname,'wb+')
             np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
             # print(self.fid_mean.shape,self.fid_covar.shape)
@@ -104,9 +104,11 @@ class Trainer(object):
         loader = DataLoader(self.data[split], batch_size = 8, shuffle=True, num_workers = args.num_workers)
         for i,batch in enumerate(loader):
             batch = batch.to(self.args.device)
-            if self.args.datast == 'mnist':
-                x = torch.stack([x,x,x],dim=1)
-            batch = (batch - torch.min(batch,dim=0)[0])/(torch.max(batch,dim=0)[0] - torch.min(batch,dim=0)[0])
+            if self.args.dataset == 'mnist':
+                #print(batch.shape)
+                batch = torch.cat([batch,batch,batch],dim=1)
+            if self.args.renormalize:
+                batch = (batch - torch.min(batch,dim=0)[0])/(torch.max(batch,dim=0)[0] - torch.min(batch,dim=0)[0])
             batch = (batch * 2) - 1
             # if i%10==0:
             #     print(i)
@@ -117,7 +119,8 @@ class Trainer(object):
             acts.append(fid_act.detach().cpu())
 
         act = torch.cat(acts).numpy()
-
+        
+        print(np.unique(act))
         mean = np.mean(act,axis=0)
         covar = np.cov(act,rowvar=False)
         self.inception.to(torch.device('cpu'))
@@ -145,8 +148,9 @@ class Trainer(object):
             step = epoch * len(data_loader) + i
             batch = batch.to(self.args.device)
 
-            noise_idx = torch.randint(0, len(self.args.noise_std), shape=(batch.size(0),), device=batch.device)
-            noise_levels = self.args.noise_std[noise_idx].view(batch.size(0),*([1]*len(batch.shape[1:])))
+            noise_idx = torch.randint(0, len(self.args.noise_std), size=(batch.size(0),), device=batch.device)
+            noise_levels = torch.tensor(self.args.noise_std).float()[noise_idx].view(batch.size(0),*([1]*len(batch.shape[1:])))
+            noise_levels = noise_levels.to(self.args.device)
 
             noise = torch.randn_like(batch).to(self.args.device) * noise_levels #torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
 
