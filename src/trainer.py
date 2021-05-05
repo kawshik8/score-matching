@@ -89,6 +89,10 @@ class Trainer(object):
         #    np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
             # print(self.fid_mean.shape,self.fid_covar.shape)
 
+        if self.args.ema_mu < 1:
+            self.ema_helper = EMAHelper(self.args.ema_mu)
+            self.ema_helper.register(self.model)
+
         self.model.to(self.args.device)
             
             
@@ -192,6 +196,9 @@ class Trainer(object):
                 loss.backward()
                 self.optimizer.step()
 
+            if self.args.ema_mu < 1:
+                self.ema_helper.update(self.model)
+
             total_losses.append(loss.detach().cpu().numpy())
             progress.update(len(batch))
             progress.set_postfix(loss=loss.item())
@@ -234,11 +241,13 @@ class Trainer(object):
                     best_iscore = iscore
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval inception score " + str(best_iscore))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_iscore.ckpt")
+                    torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_iscore_ema.ckpt")
                 
                 if best_fid is None or best_fid < fid:
                     best_fid = fid
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval fid score " + str(best_fid))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_fid.ckpt")
+                    torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_fid_ema.ckpt")
 
                 self.log.info("\t\tInception Score: " + str(iscore) + "\n\t\tFid Score: " + str(fid))
            
@@ -248,6 +257,7 @@ class Trainer(object):
                 self.log.info("Best model found at epoch " + str(epoch) + " with eval loss " + str(best_loss))
                 patient_steps = 0
                 torch.save(self.model.state_dict(), self.args.model_dir + "best.ckpt")
+                torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_ema.ckpt")
             else:
                 patient_steps += 1
                 if patient_steps == self.args.early_stop_patience:
@@ -255,6 +265,7 @@ class Trainer(object):
                     break
 
             torch.save(self.model.state_dict(), self.args.model_dir + "epoch.ckpt")
+            torch.save(self.ema_helper.state_dict(), self.args.model_dir + "epoch_ema.ckpt")
             if self.args.optimizer=='adam':
                 torch.save(self.optimizer.state_dict(), self.args.model_dir + "epoch_optimizer.ckpt")
 
@@ -268,7 +279,7 @@ class Trainer(object):
             print("load model directory is None")
             exit(0)
         else:
-            self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ".ckpt"))
+            self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ("_ema" if self.args.use_ema else "") + ".ckpt"))
 
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
@@ -328,7 +339,7 @@ class Trainer(object):
                         prev_batch = curr_batch.clone()
 
                   #      print(type(step_size),type(args.step_lr),type(noise_level),type(self.args.noise_std[-1]))
-                        curr_batch = curr_batch + (step_size/2)*energy_gradient + ((2*step_size)**0.5)*noise
+                        curr_batch = curr_batch + step_size * energy_gradient + ((2*step_size)**0.5)*noise
 
                         if self.args.clamp:
                             curr_batch = torch.clamp(curr_batch,0.0,1.0)
@@ -341,6 +352,12 @@ class Trainer(object):
 
                         if step > 0 and step%self.args.sampling_log_freq==0:
                             self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\tImage Norm: " + str(image_norm) + "\tNoise norm: " + str(noise_norm) + "\nsnr: " + str(snr) + "\tgrad mean norm: " + str(grad_mean_norm) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
+
+                if self.args.denoise:
+                    energy_gradient = self.model(curr_batch.to(self.args.device))
+                    if self.args.reweight:
+                        energy_gradient = energy_gradient / self.args.noise_std[-1]
+                    curr_batch = curr_batch + (self.args.noise_std[-1]**2) * energy_gradient
 
             else:
                 for step in range(self.args.max_step):# and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
@@ -360,18 +377,20 @@ class Trainer(object):
 
                     
                     if self.args.reweight:
-                        energy_gradient = energy_gradient / float(self.args.noise_std[0])
+                        energy_gradient = energy_gradient / float(noise_level)
 
                     prev_batch = curr_batch.clone()
 
-                    if self.args.step_grad_choice == 'pgrad':
+                    if self.args.step_grad_choice == 'rgrad':
                         step_grad = -(curr_batch - batch)
                         if self.args.reweight:
-                            step_grad = step_grad/(float(self.args.noise_std[0])**2)
-                    elif self.args.step_grad_choice == 'rgrad':
+                            step_grad = step_grad/(float(noise_level)**2)
+                    elif self.args.step_grad_choice == 'pgrad':
                         step_grad = energy_gradient
 
-                    #print(torch.norm(step_grad.view(step_grad.size(0),-1),-1), torch.norm(energy_gradient.view(step_grad.size(0),-1),-1))
+
+                    # print(torch.norm(step_grad.view(step_grad.size(0),-1),-1), torch.norm(energy_gradient.view(step_grad.size(0),-1),-1))
+
 
                     if self.args.sampling_strategy == 'vanilla':
                         curr_batch = curr_batch + self.args.step_lr * step_grad
