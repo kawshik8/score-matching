@@ -73,7 +73,7 @@ sampling_parser.add_argument('--denoise', action='store_true', help='denoise aft
 # Testing params
 test_parser = parser.add_argument_group("test","sampling params")
 test_parser.add_argument('--test-model', action='store_true', help='testing mode')
-test_parser.add_argument('--use-ema', type=int, default=1, help='use ema model for sampling?')
+test_parser.add_argument('--use-ema', type=int, default=0, help='use ema model for sampling?')
 test_parser.add_argument('--ckpt-type', type=str, default='best', choices = ['best','epoch','best_fid','best_iscore'], help='testing mode')
 test_parser.add_argument('--test-split', type=str, default='test', help='testing mode')
 test_parser.add_argument('--load-mdir', type=str, default=None, help='load dir for trained model')
