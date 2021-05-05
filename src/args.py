@@ -49,6 +49,7 @@ train_parser.add_argument("--fid-layer", type=int, default=-1, help="which layer
 train_parser.add_argument('--distance-metric', default='l2', type=str, choices = ['l2','ned'],help='l2 distance vs normalized euclidean distance')
 train_parser.add_argument("--weight-decay", type=float, default=0, help="weight decay for training")
 train_parser.add_argument("--noise-std", type=str, default="10", help="Standard deviation of noise (Give multiple noise levels separated by commas)")
+train_parser.add_argument('--ema-mu', type=float, default=1, help='do exponential moving average to get a stable model for sampling')
 
 # Sampling options
 sampling_parser = parser.add_argument_group("sampling","sampling params")
@@ -63,14 +64,16 @@ sampling_parser.add_argument('--init-value', type=str, default='uniform', choice
 sampling_parser.add_argument('--step-lr', default=0.1, type=float, help='provide a list to use a mixture of learning rates')
 sampling_parser.add_argument('--step-fgrad', type=float, default=1e-4, help='final grad to stop at')
 sampling_parser.add_argument('--max-step', type=int, default=250, help='maximum no of steps for MCMC sampling')
-sampling_parser.add_argument('--step-grad-choice', type=str, default='rgrad', choices=['rgrad','pgrad','mgrad','agrad'], help='step using predicted gradient vs real gradient vs equal combination vs annealed combination (0.25 tgrad 0.5 annealed prob mixture 0.25 pgrad)')
+sampling_parser.add_argument('--step-grad-choice', type=str, default='pgrad', choices=['rgrad','pgrad','mgrad','agrad'], help='step using predicted gradient vs real gradient vs equal combination vs annealed combination (0.25 tgrad 0.5 annealed prob mixture 0.25 pgrad)')
 sampling_parser.add_argument('--lr-anneal-strategy', type=str, default='const', choices=['const','istep'], help='constantly anneal vs anneal wrt steps taken)')
 sampling_parser.add_argument('--lr-anneal', type=float, default=1.0, help='anneal constant to multiply at each step')
 sampling_parser.add_argument('--renormalize', type=int, default=1, help='renormalize to [0,1] after sampling?')
+sampling_parser.add_argument('--denoise', action='store_true', help='denoise after sampling')
 
 # Testing params
 test_parser = parser.add_argument_group("test","sampling params")
 test_parser.add_argument('--test-model', action='store_true', help='testing mode')
+test_parser.add_argument('--use-ema', type=int, default=1, help='use ema model for sampling?')
 test_parser.add_argument('--ckpt-type', type=str, default='best', choices = ['best','epoch','best_fid','best_iscore'], help='testing mode')
 test_parser.add_argument('--test-split', type=str, default='test', help='testing mode')
 test_parser.add_argument('--load-mdir', type=str, default=None, help='load dir for trained model')
