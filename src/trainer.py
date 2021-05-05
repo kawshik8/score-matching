@@ -235,14 +235,16 @@ class Trainer(object):
             self.log.info("\t\tTrain Loss: " + str(train_loss) + "\n\t\tVal Loss: " + str(eval_loss))
 
             if args.model_selection == 'sampling':
-                iscore, fid = self.sampling('valid',args.selection_num_samples)
+                iscore, fid = self.sampling('valid',args.selection_num_samples, model=(self.ema_helper.ema_copy(self.model) if self.args.use_ema else self.model))
 
+                self.writer.add_scalar('eval_val-set/iscore', iscore, epoch)
                 if best_iscore is None or best_iscore > iscore:
                     best_iscore = iscore
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval inception score " + str(best_iscore))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_iscore.ckpt")
                     if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_iscore_ema.ckpt")
                 
+                self.writer.add_scalar('eval_val-set/fid', fid, epoch)
                 if best_fid is None or best_fid < fid:
                     best_fid = fid
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval fid score " + str(best_fid))
@@ -279,19 +281,22 @@ class Trainer(object):
             print("load model directory is None")
             exit(0)
         else:
-            self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ("_ema" if self.args.use_ema else "") + ".ckpt"))
+            if self.args.use_ema:
+                self.ema_helper.ema_copy(self.model)
+            else:
+                self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ".ckpt"))
 
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
 
-        iscore, fid = self.sampling(args.test_split,self.args.ntest)
+        iscore, fid = self.sampling(args.test_split,self.args.ntest, model=self.model)
         self.log.info("Test Inception Score: " + str(iscore) + "\t FID Score: " + str(fid))
 
-    def sampling(self, split, num_samples=5000):
+    def sampling(self, split, num_samples=5000, model=None):
 
         assert split in {'train','valid','test'}
 
-        self.model.eval()
+        model.eval()
 
         data_loader = self.sloader[split]
 
@@ -324,10 +329,10 @@ class Trainer(object):
                         noise = torch.randn_like(batch)
 
                         if self.args.model_objective == 'score':
-                            energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()
+                            energy_gradient = model(curr_batch.to(self.args.device)).detach().cpu()
 
                         else:
-                            energy = self.model(curr_batch.to(self.args.device)).detach().cpu()
+                            energy = model(curr_batch.to(self.args.device)).detach().cpu()
                             curr_batch.requires_grad = True
                             energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
                                                                     grad_outputs=torch.ones(energy.size()).to(self.args.device),
@@ -354,7 +359,7 @@ class Trainer(object):
                             self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\tImage Norm: " + str(image_norm) + "\tNoise norm: " + str(noise_norm) + "\nsnr: " + str(snr) + "\tgrad mean norm: " + str(grad_mean_norm) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
                 if self.args.denoise:
-                    energy_gradient = self.model(curr_batch.to(self.args.device))
+                    energy_gradient = model(curr_batch.to(self.args.device))
                     if self.args.reweight:
                         energy_gradient = energy_gradient / self.args.noise_std[-1]
                     curr_batch = curr_batch + (self.args.noise_std[-1]**2) * energy_gradient
@@ -366,10 +371,10 @@ class Trainer(object):
                     noise = torch.randn_like(batch)
                     
                     if self.args.model_objective == 'score':
-                        energy_gradient = self.model(curr_batch.to(self.args.device)).detach().cpu()
+                        energy_gradient = model(curr_batch.to(self.args.device)).detach().cpu()
 
                     else:
-                        energy = self.model(curr_batch)
+                        energy = model(curr_batch)
                         curr_batch.requires_grad = True
                         energy_gradient = torch.autograd.grad(outputs=energy, inputs=curr_batch,
                                                                 grad_outputs=torch.ones(energy.size()).to(self.args.device),
