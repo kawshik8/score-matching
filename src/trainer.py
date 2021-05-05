@@ -197,7 +197,9 @@ class Trainer(object):
                 self.optimizer.step()
 
             if self.args.ema_mu < 1:
+                self.model.to(torch.device('cpu'))
                 self.ema_helper.update(self.model)
+                self.model.to(self.args.device)
 
             total_losses.append(loss.detach().cpu().numpy())
             progress.update(len(batch))
