@@ -14,6 +14,12 @@ from torchvision import transforms
 from scipy.stats import entropy
 from torch.autograd import Variable
 from scipy import linalg
+from copy import deepcopy
+from collections import OrderedDict
+from sys import stderr
+
+# for type hint
+from torch import Tensor
 
 EPSILON = 1e-8
 
@@ -187,50 +193,46 @@ def save_model(save_ckpt, model):
     torch.save(model.state_dict(), save_ckpt)
     log.info("Save parameters for %s" % save_ckpt)
 
-class EMAHelper(object):
-    def __init__(self, mu=0.999):
-        self.mu = mu
-        self.shadow = {}
+class EMA(nn.Module):
+    def __init__(self, model=None, decay=0.999):
+        super().__init__()
+        self.decay = decay
 
-    def register(self, module):
-        # if isinstance(module, nn.DataParallel):
-        #     module = module.module
-        for name, param in module.named_parameters():
-            if param.requires_grad:
-                self.shadow[name] = param.data.clone()
+        # self.model = model
+        self.shadow = deepcopy(self.model)
 
-    def update(self, module):
-        # if isinstance(module, nn.DataParallel):
-        #     module = module.module
-        for name, param in module.named_parameters():
-            if param.requires_grad:
-                self.shadow[name].data = (1. - self.mu) * param.data + self.mu * self.shadow[name].data
+        for param in self.shadow.parameters():
+            param.detach_()
 
-    def ema(self, module):
-        # if isinstance(module, nn.DataParallel):
-        #     module = module.module
-        for name, param in module.named_parameters():
-            if param.requires_grad:
-                param.data.copy_(self.shadow[name].data)
+    @torch.no_grad()
+    def update(self, model):
+        if not self.training:
+            print("EMA update should only be called during training")
+            return
 
-    def ema_copy(self, module):
-        # if isinstance(module, nn.DataParallel):
-        #     inner_module = module.module
-        #     module_copy = type(inner_module)(inner_module.config).to(inner_module.config.device)
-        #     module_copy.load_state_dict(inner_module.state_dict())
-        #     module_copy = nn.DataParallel(module_copy)
-        # else:
-        module_copy = type(module)(module.config).to(module.config.device)
-        module_copy.load_state_dict(module.state_dict())
-        # module_copy = copy.deepcopy(module)
-        self.ema(module_copy)
-        return module_copy
+        model_params = OrderedDict(model.named_parameters())
+        shadow_params = OrderedDict(self.shadow.named_parameters())
 
-    def state_dict(self):
-        return self.shadow
+        # check if both model contains the same set of keys
+        assert model_params.keys() == shadow_params.keys()
 
-    def load_state_dict(self, state_dict):
-        self.shadow = state_dict
+        for name, param in model_params.items():
+            # see https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
+            # shadow_variable -= (1 - decay) * (shadow_variable - variable)
+            shadow_params[name].sub_((1. - self.decay) * (shadow_params[name] - param))
+
+        model_buffers = OrderedDict(model.named_buffers())
+        shadow_buffers = OrderedDict(self.shadow.named_buffers())
+
+        # check if both model contains the same set of keys
+        assert model_buffers.keys() == shadow_buffers.keys()
+
+        for name, buffer in model_buffers.items():
+            # buffers are copied
+            shadow_buffers[name].copy_(buffer)
+
+    def forward(self, inputs):
+        return self.shadow(inputs)
 
 if __name__=='__main__':
     import args

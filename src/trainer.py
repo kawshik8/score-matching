@@ -90,8 +90,7 @@ class Trainer(object):
             # print(self.fid_mean.shape,self.fid_covar.shape)
 
         if self.args.ema_mu < 1:
-            self.ema_helper = EMAHelper(self.args.ema_mu)
-            self.ema_helper.register(self.model)
+            self.ema = EMA(self.model)
 
         self.model.to(self.args.device)
             
@@ -198,7 +197,7 @@ class Trainer(object):
 
             if self.args.ema_mu < 1:
                 self.model.to(torch.device('cpu'))
-                self.ema_helper.update(self.model)
+                self.ema.update(self.model)
                 self.model.to(self.args.device)
 
             total_losses.append(loss.detach().cpu().numpy())
@@ -237,21 +236,21 @@ class Trainer(object):
             self.log.info("\t\tTrain Loss: " + str(train_loss) + "\n\t\tVal Loss: " + str(eval_loss))
 
             if args.model_selection == 'sampling':
-                iscore, fid = self.sampling('valid',args.selection_num_samples, model=(self.ema_helper.ema_copy(self.model) if self.args.use_ema else self.model))
+                iscore, fid = self.sampling('valid',args.selection_num_samples, model=(self.ema.shadow if self.args.use_ema else self.model))
 
                 self.writer.add_scalar('eval_val-set/iscore', iscore, epoch)
                 if best_iscore is None or best_iscore > iscore:
                     best_iscore = iscore
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval inception score " + str(best_iscore))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_iscore.ckpt")
-                    if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_iscore_ema.ckpt")
+                    if self.args.ema_mu < 1: torch.save(self.ema.shadow.state_dict(), self.args.model_dir + "best_iscore_ema.ckpt")
                 
                 self.writer.add_scalar('eval_val-set/fid', fid, epoch)
                 if best_fid is None or best_fid < fid:
                     best_fid = fid
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval fid score " + str(best_fid))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_fid.ckpt")
-                    if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_fid_ema.ckpt")
+                    if self.args.ema_mu < 1: torch.save(self.ema.shadow.state_dict(), self.args.model_dir + "best_fid_ema.ckpt")
 
                 self.log.info("\t\tInception Score: " + str(iscore) + "\n\t\tFid Score: " + str(fid))
            
@@ -261,7 +260,7 @@ class Trainer(object):
                 self.log.info("Best model found at epoch " + str(epoch) + " with eval loss " + str(best_loss))
                 patient_steps = 0
                 torch.save(self.model.state_dict(), self.args.model_dir + "best.ckpt")
-                if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_ema.ckpt")
+                if self.args.ema_mu < 1: torch.save(self.ema.shadow.state_dict(), self.args.model_dir + "best_ema.ckpt")
             else:
                 patient_steps += 1
                 if patient_steps == self.args.early_stop_patience:
@@ -269,7 +268,7 @@ class Trainer(object):
                     break
 
             torch.save(self.model.state_dict(), self.args.model_dir + "epoch.ckpt")
-            if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "epoch_ema.ckpt")
+            if self.args.ema_mu < 1: torch.save(self.ema.shadow.state_dict(), self.args.model_dir + "epoch_ema.ckpt")
             if self.args.optimizer=='adam':
                 torch.save(self.optimizer.state_dict(), self.args.model_dir + "epoch_optimizer.ckpt")
 
@@ -283,10 +282,7 @@ class Trainer(object):
             print("load model directory is None")
             exit(0)
         else:
-            if self.args.use_ema:
-                self.ema_helper.ema_copy(self.model)
-            else:
-                self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ".ckpt"))
+            self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ("_ema" if self.args.use_ema else "") + ".ckpt"))
 
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
@@ -295,6 +291,9 @@ class Trainer(object):
         self.log.info("Test Inception Score: " + str(iscore) + "\t FID Score: " + str(fid))
 
     def sampling(self, split, num_samples=5000, model=None):
+
+        if self.args.use_ema:
+            self.ema.shadow.to(self.args.device)
 
         assert split in {'train','valid','test'}
 
@@ -461,6 +460,10 @@ class Trainer(object):
         all_samples = (all_samples * 2) - 1
         mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar, mnist=(self.args.dataset=='mnist'))
         # print(mean_inception,std_inception,fid)
+
+        if self.args.use_ema:
+            self.ema.shadow.to(torch.device('cpu'))
+
         return mean_inception,fid
             
 
