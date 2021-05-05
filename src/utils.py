@@ -199,7 +199,7 @@ class EMA(nn.Module):
         self.decay = decay
 
         # self.model = model
-        self.shadow = deepcopy(self.model)
+        self.shadow = deepcopy(model)
 
         for param in self.shadow.parameters():
             param.detach_()

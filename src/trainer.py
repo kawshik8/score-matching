@@ -90,7 +90,7 @@ class Trainer(object):
             # print(self.fid_mean.shape,self.fid_covar.shape)
 
         if self.args.ema_mu < 1:
-            self.ema = EMA(self.model)
+            self.ema = EMA(model=self.model, decay=self.args.ema_mu)
 
         self.model.to(self.args.device)
             
