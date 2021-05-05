@@ -10,7 +10,7 @@
 
 #### Training!!
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --batch-size 128 --noise-std 1,0.01,10 --optimizer sgd_mom --lr 1e-4
-bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --mfile multin-instance-rplat-cifar-ema-select-sampling --unet-block conv_block --norm-type instance --data-dir ../data --lr 1e-3 --batch-size 32 --noise-std 1,0.01,10 --optimizer adam --scheduler reduce_plateau --dataset cifar10  --ema-mu 0.999 --model-selection sampling --use-ema 1 #one_cycle --cycle-pct 0.2 #--weight-decay 1e-3 #--model-selection sampling --step-lr 5e-6 --sampling-strategy ann_langevin --max-step 100
+#bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --mfile multin-instance-rplat-cifar-ema-select-sampling --unet-block conv_block --norm-type instance --data-dir ../data --lr 1e-3 --batch-size 32 --noise-std 1,0.01,10 --optimizer adam --scheduler reduce_plateau --dataset cifar10  --ema-mu 0.999 --model-selection sampling --use-ema 1 #one_cycle --cycle-pct 0.2 #--weight-decay 1e-3 #--model-selection sampling --step-lr 5e-6 --sampling-strategy ann_langevin --max-step 100
 
 #### Sampling!!!
 ############# MNIST
@@ -25,12 +25,12 @@ bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --mfile multin-i
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-6 --lr-anneal 0.99 --max-step 250 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 10,0.01,100 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-5 --lr-anneal 0.99 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
 ########### MNIST vanilla
-### lr  1e-5, 1e-1, 1e-2, (1e-2,0.99,250), (1,0.99,250), (1e-2,0.999,250)
+### lr  1e-5, 1e-1, 1e-2, (1e-2,0.99,250), (1,0.99,250), (1e-2,0.999,250), (1e-2,1000), (1e-3,1000), (1e-2,1000,denoise)
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy vanilla --step-grad-choice rgrad --step-lr 1e-5 --lr-anneal 1.0 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy vanilla --step-grad-choice rgrad --step-lr 1e-2 --lr-anneal 0.999 --max-step 250 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy vanilla --step-grad-choice rgrad --step-lr 1e-2 --lr-anneal 1.0 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy vanilla --step-grad-choice rgrad --step-lr 1e-3 --lr-anneal 1.0 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
-
+bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-mnist-lr_1e-3 --sampling-strategy vanilla --step-grad-choice rgrad --step-lr 1e-2 --denoise --lr-anneal 1.0 --max-step 1000 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset mnist
 
 ############ CIFAR
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-cifar-lr_1e-3 --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-5 --lr-anneal 0.99 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset cifar10
