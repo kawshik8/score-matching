@@ -241,13 +241,13 @@ class Trainer(object):
                     best_iscore = iscore
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval inception score " + str(best_iscore))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_iscore.ckpt")
-                    torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_iscore_ema.ckpt")
+                    if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_iscore_ema.ckpt")
                 
                 if best_fid is None or best_fid < fid:
                     best_fid = fid
                     self.log.info("Best model found at epoch " + str(epoch) + " with eval fid score " + str(best_fid))
                     torch.save(self.model.state_dict(), self.args.model_dir + "best_fid.ckpt")
-                    torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_fid_ema.ckpt")
+                    if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_fid_ema.ckpt")
 
                 self.log.info("\t\tInception Score: " + str(iscore) + "\n\t\tFid Score: " + str(fid))
            
@@ -257,7 +257,7 @@ class Trainer(object):
                 self.log.info("Best model found at epoch " + str(epoch) + " with eval loss " + str(best_loss))
                 patient_steps = 0
                 torch.save(self.model.state_dict(), self.args.model_dir + "best.ckpt")
-                torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_ema.ckpt")
+                if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "best_ema.ckpt")
             else:
                 patient_steps += 1
                 if patient_steps == self.args.early_stop_patience:
@@ -265,7 +265,7 @@ class Trainer(object):
                     break
 
             torch.save(self.model.state_dict(), self.args.model_dir + "epoch.ckpt")
-            torch.save(self.ema_helper.state_dict(), self.args.model_dir + "epoch_ema.ckpt")
+            if self.args.ema_mu < 1: torch.save(self.ema_helper.state_dict(), self.args.model_dir + "epoch_ema.ckpt")
             if self.args.optimizer=='adam':
                 torch.save(self.optimizer.state_dict(), self.args.model_dir + "epoch_optimizer.ckpt")
 
