@@ -77,16 +77,16 @@ class Trainer(object):
         self.writer = SummaryWriter(log_dir=tensorboard_log_dir)
 
         fname = args.dataset + "_stats_" + str(args.fid_layer) + ".npz"
-        if os.path.exists(fname):
-            f = open(fname,'rb')
-            fid_stats = np.load(f)
-            self.fid_mean = fid_stats['mean']
-            self.fid_covar = fid_stats['covar']
+        #if os.path.exists(fname):
+        #    f = open(fname,'rb')
+        #    fid_stats = np.load(f)
+        #    self.fid_mean = fid_stats['mean']
+        #    self.fid_covar = fid_stats['covar']
             # print(self.fid_mean.shape,self.fid_covar.shape)
-        else:
-            self.fid_mean, self.fid_covar = self.get_representative_stats('train')
-            f = open(fname,'wb+')
-            np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
+        #else:
+        self.fid_mean, self.fid_covar = self.get_representative_stats('train')
+        #f = open(fname,'wb+')
+        #    np.savez(f, mean=self.fid_mean,covar=self.fid_covar)
             # print(self.fid_mean.shape,self.fid_covar.shape)
 
         if self.args.ema_mu < 1:
@@ -388,7 +388,9 @@ class Trainer(object):
                     elif self.args.step_grad_choice == 'pgrad':
                         step_grad = energy_gradient
 
+
                     # print(torch.norm(step_grad.view(step_grad.size(0),-1),-1), torch.norm(energy_gradient.view(step_grad.size(0),-1),-1))
+
 
                     if self.args.sampling_strategy == 'vanilla':
                         curr_batch = curr_batch + self.args.step_lr * step_grad
