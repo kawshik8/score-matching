@@ -359,12 +359,6 @@ class Trainer(object):
                         if step > 0 and step%self.args.sampling_log_freq==0:
                             self.log.info("Noise Level: " + str(noise_level) + "\tstep: " + str(step) + "\nPredicted gradient: " + str(grad_norm) + "\tImage Norm: " + str(image_norm) + "\tNoise norm: " + str(noise_norm) + "\nsnr: " + str(snr) + "\tgrad mean norm: " + str(grad_mean_norm) + "\nImage step Diff: " + str(((curr_batch - prev_batch)**2).mean()))
 
-                if self.args.denoise:
-                    energy_gradient = model(curr_batch.to(self.args.device))
-                    if self.args.reweight:
-                        energy_gradient = energy_gradient / self.args.noise_std[-1]
-                    curr_batch = curr_batch + (self.args.noise_std[-1]**2) * energy_gradient
-
             else:
                 for step in range(self.args.max_step):# and ((curr_batch - prev_batch)**2).mean() > 1e-4: #torch.norm(curr_batch - batch ,dim=1).mean() > 0.01 and #step <= self.args.max_step:
                 
@@ -427,7 +421,11 @@ class Trainer(object):
                         curr_batch = torch.clamp(curr_batch,0.0,1.0)
                         self.log.info(str(torch.unique(curr_batch)))
 
-                    
+            if self.args.denoise:
+                energy_gradient = model(curr_batch.to(self.args.device))
+                if self.args.reweight:
+                    energy_gradient = energy_gradient / noise_level
+                curr_batch = curr_batch + (noise_level**2) * energy_gradient      
 
 
                     
