@@ -292,7 +292,7 @@ class Trainer(object):
 
     def sampling(self, split, num_samples=5000, model=None):
 
-        if self.args.use_ema:
+        if self.args.use_ema and not self.args.test_model:
             self.ema.shadow.to(self.args.device)
 
         assert split in {'train','valid','test'}
@@ -422,7 +422,8 @@ class Trainer(object):
                         self.log.info(str(torch.unique(curr_batch)))
 
             if self.args.denoise:
-                energy_gradient = model(curr_batch.to(self.args.device))
+                energy_gradient = model(curr_batch.to(self.args.device)).detach().cpu()
+                noise_level = float(noise_level)
                 if self.args.reweight:
                     energy_gradient = energy_gradient / noise_level
                 curr_batch = curr_batch + (noise_level**2) * energy_gradient      
@@ -459,7 +460,7 @@ class Trainer(object):
         mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar, mnist=(self.args.dataset=='mnist'))
         # print(mean_inception,std_inception,fid)
 
-        if self.args.use_ema:
+        if self.args.use_ema and not self.args.test_model:
             self.ema.shadow.to(torch.device('cpu'))
 
         return mean_inception,fid
