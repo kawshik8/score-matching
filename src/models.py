@@ -55,7 +55,7 @@ class InstanceNorm2dPlus(nn.Module):
         return out
 
 class Conv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, transpose = False, norm_type='batch'):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, transpose = False, norm_type='batch', act_type='relu'):
         super(Conv, self).__init__()
         if transpose:
             self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding)
@@ -69,8 +69,10 @@ class Conv(nn.Module):
         elif norm_type == 'instance++':
             self.norm = InstanceNorm2dPlus(out_channels)
 
-
-        self.act = nn.ReLU()
+        if act_type == 'relu':
+            self.act = nn.ReLU()
+        elif act_type == 'elu':
+            self.act = nn.ELU()
 
     def forward(self, x):
         x = self.conv(x)
@@ -82,15 +84,15 @@ class Conv(nn.Module):
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
 
-    def __init__(self, in_channels, out_channels, mid_channels=None, norm_type='batch'):
+    def __init__(self, in_channels, out_channels, mid_channels=None, norm_type='batch', act_type='relu'):
         super().__init__()
 
         if not mid_channels:
             mid_channels = out_channels
 
         self.double_conv = nn.Sequential(
-            Conv(in_channels, mid_channels, kernel_size=3, padding=1, norm_type=norm_type),
-            Conv(mid_channels, out_channels, kernel_size=3, padding=1, norm_type=norm_type)
+            Conv(in_channels, mid_channels, kernel_size=3, padding=1, norm_type=norm_type, act_type=act_type),
+            Conv(mid_channels, out_channels, kernel_size=3, padding=1, norm_type=norm_type, act_type=act_type)
         )
 
     def forward(self, x):
@@ -100,7 +102,7 @@ class PreActBlock(nn.Module):
     '''Pre-activation version of the BasicBlock.'''
     expansion = 1
 
-    def __init__(self, in_channels, out_channels, mid_channels=None, norm_type='batch'):
+    def __init__(self, in_channels, out_channels, mid_channels=None, norm_type='batch', act_type='relu'):
         super(PreActBlock, self).__init__()
 
         if not mid_channels:
@@ -124,13 +126,18 @@ class PreActBlock(nn.Module):
                 nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
             )
 
+        if act_type == 'relu':
+            self.act = nn.ReLU()
+        elif act_type == 'elu':
+            self.act = nn.ELU()
+    
     def forward(self, x):
         
-        out = F.relu(self.bn1(x))
+        out = self.act(self.bn1(x))
         shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x
         
         out = self.conv1(out)
-        out = self.conv2(F.relu(self.bn2(out)))
+        out = self.conv2(self.act(self.bn2(out)))
         out += shortcut
         return out
 
@@ -138,17 +145,17 @@ class PreActBlock(nn.Module):
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""
 
-    def __init__(self, in_channels, out_channels, maxpool=True, norm_type='batch', block=None):
+    def __init__(self, in_channels, out_channels, maxpool=True, norm_type='batch', block=None, act_type='relu'):
         super().__init__()
         if maxpool:
             self.pool = nn.MaxPool2d(2)
         else:
-            self.pool = Conv(in_channels, out_channels, kernel_size = 2, stride = 2, padding=0, norm_type=norm_type)
+            self.pool = Conv(in_channels, out_channels, kernel_size = 2, stride = 2, padding=0, norm_type=norm_type, act_type=act_type)
 
         if block == 'conv_block':
-            self.conv = DoubleConv(in_channels if maxpool else out_channels, out_channels, norm_type=norm_type)
+            self.conv = DoubleConv(in_channels if maxpool else out_channels, out_channels, norm_type=norm_type, act_type=act_type)
         else:
-            self.conv = PreActBlock(in_channels if maxpool else out_channels, out_channels, norm_type=norm_type)
+            self.conv = PreActBlock(in_channels if maxpool else out_channels, out_channels, norm_type=norm_type, act_type=act_type)
 
     def forward(self, x):
         x = self.pool(x)
@@ -160,23 +167,23 @@ class Down(nn.Module):
 class Up(nn.Module):
     """Upscaling then double conv"""
 
-    def __init__(self, in_channels, out_channels, bilinear=False, norm_type='batch',block=None):
+    def __init__(self, in_channels, out_channels, bilinear=False, norm_type='batch',block=None, act_type='relu'):
         super().__init__()
 
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
             if block == 'conv_block':
-                self.conv = DoubleConv(in_channels + in_channels // 2, out_channels, in_channels // 2, norm_type=norm_type)
+                self.conv = DoubleConv(in_channels + in_channels // 2, out_channels, in_channels // 2, norm_type=norm_type, act_type=act_type)
             else:
-                self.conv = PreActBlock(in_channels + in_channels // 2, out_channels, in_channels // 2, norm_type=norm_type)
+                self.conv = PreActBlock(in_channels + in_channels // 2, out_channels, in_channels // 2, norm_type=norm_type, act_type=act_type)
         else:
-            self.up = Conv(in_channels , in_channels // 2, kernel_size=2, stride=2, padding=0, transpose=True, norm_type=norm_type)
+            self.up = Conv(in_channels , in_channels // 2, kernel_size=2, stride=2, padding=0, transpose=True, norm_type=norm_type, act_type=act_type)
             if block == 'conv_block':
-                self.conv = DoubleConv(in_channels, out_channels, norm_type=norm_type)
+                self.conv = DoubleConv(in_channels, out_channels, norm_type=norm_type, act_type=act_type)
             else:
-                self.conv = nn.Sequential(Conv(in_channels, out_channels, kernel_size=3, stride=1, padding=1, norm_type=norm_type), 
-                                          PreActBlock(out_channels, out_channels, norm_type=norm_type))
+                self.conv = nn.Sequential(Conv(in_channels, out_channels, kernel_size=3, stride=1, padding=1, norm_type=norm_type, act_type=act_type), 
+                                          PreActBlock(out_channels, out_channels, norm_type=norm_type, act_type=act_type))
 
 
     def forward(self, x1, x2):
@@ -196,7 +203,7 @@ class In_OutConv(nn.Module):
         return self.conv(x)
 
 class UNet(nn.Module):
-    def __init__(self, n_channels=3, depth = 3, bilinear=False, init_channels = 64, factor = 2, block='conv_block', norm_type='batch'):
+    def __init__(self, n_channels=3, depth = 3, bilinear=False, init_channels = 64, factor = 2, block='conv_block', norm_type='batch', act_type='relu', n_blocks=1):
         super(UNet, self).__init__()
         self.n_channels = n_channels
         self.bilinear = bilinear
@@ -204,15 +211,53 @@ class UNet(nn.Module):
 
         self.down_block = nn.ModuleList([])
         self.up_block = nn.ModuleList([])
+        self.n_blocks = n_blocks
         # print(block)
 
         for d in range(depth+1):
             if d==0:
-                self.down_block.append(DoubleConv(n_channels, init_channels, norm_type=norm_type) if block=='conv_block' else nn.Sequential(In_OutConv(n_channels, init_channels, kernel_size=3, stride=1, padding=1), PreActBlock(init_channels, init_channels, norm_type=norm_type)))
+                if block == 'conv_block':
+                    down_block = nn.ModuleList([DoubleConv(n_channels, init_channels, norm_type=norm_type, act_type=act_type)])
+                    
+                    if n_blocks > 1:
+                        for n in range(n_blocks-1):
+                            down_block.append(DoubleConv(init_channels, init_channels, norm_type=norm_type, act_type=act_type))
+                    
+                    self.down_block.append(down_block)
+                else:
+                    down_block = nn.ModuleList([nn.Sequential(In_OutConv(n_channels, init_channels, kernel_size=3, stride=1, padding=1), PreActBlock(init_channels, init_channels, norm_type=norm_type, act_type=act_type))])
+
+                    if n_blocks > 1:
+                        for n in range(n_blocks-1):
+                            down_block.append(PreActBlock(init_channels, init_channels, norm_type=norm_type, act_type=act_type))
+
+                    self.down_block.append(down_block)
+
                 self.up_block.append(In_OutConv(init_channels, n_channels, kernel_size=3, stride=1, padding=1))
             else:
-                self.down_block.append(Down(init_channels, init_channels * 2, maxpool=bilinear, norm_type=norm_type, block=block))
-                self.up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear, norm_type=norm_type, block=block)]).extend(self.up_block)
+                down_block = nn.ModuleList([Down(init_channels, init_channels * 2, maxpool=bilinear, norm_type=norm_type, block=block, act_type=act_type)])
+                if n_blocks > 1:
+                    for n in range(n_blocks-1):
+                        if block == 'conv_block':
+                            down_block.append(DoubleConv(init_channels * 2, init_channels * 2, norm_type=norm_type, act_type=act_type))
+                        else:
+                            down_block.append(PreActBlock(init_channels * 2, init_channels * 2, norm_type=norm_type, act_type=act_type))
+                self.down_block.append(down_block)
+                        
+                
+                if n_blocks > 1:
+                    up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear, norm_type=norm_type, block=block, act_type=act_type)])
+                    for n in range(n_blocks-1):
+                        if block == 'conv_block':
+                            up_block.append(DoubleConv(init_channels, init_channels, norm_type=norm_type, act_type=act_type)) 
+                        else:
+                            up_block.append(PreActBlock(init_channels, init_channels, norm_type=norm_type, act_type=act_type)) 
+                    self.up_block = nn.ModuleList([up_block]).extend(self.up_block)
+                    
+                else:
+                    self.up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear, norm_type=norm_type, block=block, act_type=act_type)]).extend(self.up_block)
+            
+                
                 init_channels = init_channels*2
 
 
@@ -221,54 +266,99 @@ class UNet(nn.Module):
         skip_connections = []
         # print("input: ", x.shape)
         for i in range(self.depth+1):
-            x = self.down_block[i](x)
+            for j in range(self.n_blocks):
+                x = self.down_block[i][j](x)
+                print("down " + str(i) + "," + str(j) + ": ", x.shape)
             skip_connections.append(x)
-            # print("down " + str(i) + ": ", x.shape)
+            
 
         for i in range(self.depth+1):
-            # print("up-in " + str(i) + ": ", x.shape, skip_connections[self.depth-i-1].shape)
+            
+            
             if i==self.depth:
+                print("up-in " + str(i) + ": ", x.shape)
                 x = self.up_block[i](x)
-            else:
+                print("up " + str(i) + ": ", x.shape)
                 
-                x = self.up_block[i](x,skip_connections[self.depth-i-1])
-                # print("up " + str(i) + ": ", x.shape)
+            else:
+                print("up-in " + str(i) + ": ", x.shape, skip_connections[self.depth-i-1].shape)
+                for j in range(self.n_blocks):
+                    if j==0:
+                        x = self.up_block[i][j](x,skip_connections[self.depth-i-1])
+                    else:
+                        x = self.up_block[i][j](x)
+
+                    print("up " + str(i) + "," + str(j) + ": ", x.shape)
 
         return x
 
 class Encoder(nn.Module):
-    def __init__(self, n_channels=3, bilinear=False, depth = 3, init_channels = 64, factor = 2, norm_type='batch'):
+    def __init__(self, n_channels=3, bilinear=False, depth = 3, init_channels = 64, factor = 2, block='conv_block', norm_type='batch', act_type='relu', n_blocks=1):
         super(Encoder, self).__init__()
         self.n_channels = n_channels
         self.bilinear = bilinear
         self.depth = depth
+        self.n_blocks = n_blocks
 
         self.down_block = nn.ModuleList([])
 
         for d in range(depth+1):
             if d==0:
-                self.down_block.append(DoubleConv(n_channels, init_channels, norm_type=norm_type))
+                if block == 'conv_block':
+                    down_block = nn.ModuleList([DoubleConv(n_channels, init_channels, norm_type=norm_type, act_type=act_type)])
+                    
+                    if n_blocks > 1:
+                        for n in range(n_blocks-1):
+                            down_block.append(DoubleConv(init_channels, init_channels, norm_type=norm_type, act_type=act_type))
+                    
+                    self.down_block.append(down_block)
+                else:
+                    down_block = nn.ModuleList([nn.Sequential(In_OutConv(n_channels, init_channels, kernel_size=3, stride=1, padding=1), PreActBlock(init_channels, init_channels, norm_type=norm_type, act_type=act_type))])
+
+                    if n_blocks > 1:
+                        for n in range(n_blocks-1):
+                            down_block.append(PreActBlock(init_channels, init_channels, norm_type=norm_type, act_type=act_type))
+
+                    self.down_block.append(down_block)
+
             else:
-                self.down_block.append(Down(init_channels, init_channels * 2, maxpool=bilinear, norm_type=norm_type))
+                down_block = nn.ModuleList([Down(init_channels, init_channels * 2, maxpool=bilinear, norm_type=norm_type, block=block, act_type=act_type)])
+                if n_blocks > 1:
+                    for n in range(n_blocks-1):
+                        if block == 'conv_block':
+                            down_block.append(DoubleConv(init_channels * 2, init_channels * 2, norm_type=norm_type, act_type=act_type))
+                        else:
+                            down_block.append(PreActBlock(init_channels * 2, init_channels * 2, norm_type=norm_type, act_type=act_type))
+                self.down_block.append(down_block)
+                        
                 init_channels = init_channels*2
+
 
         self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
 
         self.dropout = torch.nn.Dropout(p=0.5)
         self.linear = nn.Linear(init_channels, 128)
+
+        if act_type == 'relu':
+            self.act = nn.ReLU()
+        elif act_type == 'elu':
+            self.act = nn.ELU()
+
         self.out = nn.Linear(128, 1)
 
 
     def forward(self, x):
         
-        # print("input: ", x.shape)
+        print("input: ", x.shape)
         for i in range(self.depth+1):
-            x = self.down_block[i](x)
-            # print("down " + str(i) + ": ", x.shape)
+            for j in range(self.n_blocks):
+                x = self.down_block[i][j](x)
+                print("down " + str(i) + "," + str(j) + ": ", x.shape)
 
         x = self.avg_pool(x).view(x.size(0),-1)
         x = self.dropout(x)
         x = self.linear(x)
+        x = self.act(x)
         x = self.out(x)
 
         return x
@@ -279,10 +369,14 @@ class Encoder(nn.Module):
 if __name__ == "__main__":
     from args import process_args
     args = process_args()
-    model = UNet(depth=args.unet_depth, norm_type=args.norm_type, block=args.unet_block)
-    print(model)
-    print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
-
+    if args.model_objective == 'score':
+        model = UNet(depth=args.unet_depth, norm_type=args.norm_type, block=args.unet_block, act_type=args.act, n_blocks=args.n_blocks)
+        print(model)
+        print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
+    else:
+        model = Encoder(depth=args.unet_depth, norm_type=args.norm_type, block=args.unet_block, act_type=args.act, n_blocks=args.n_blocks)
+        print(model)
+        print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)
     # model = Encoder(3)
     # print(model)
     # print(torch.rand(64,3,32,32).shape, model(torch.rand(64,3,32,32)).shape)

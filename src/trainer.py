@@ -23,9 +23,9 @@ class Trainer(object):
         self.args = args
 
         if args.model_objective == 'score':
-            self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3))
+            self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
         elif args.model_objective == 'energy':
-            self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3))
+            self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
 
         self.inception = Inception(args.fid_layer).eval()
         
@@ -157,6 +157,9 @@ class Trainer(object):
 
             noise = torch.randn_like(batch).to(self.args.device) * noise_levels #torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
 
+            if self.args.min_max_normalize:
+                noisy_batch = (2 * noisy_batch) - 1
+
             noisy_batch = batch + noise 
 
             image_diff = - noise
@@ -165,7 +168,7 @@ class Trainer(object):
                 image_diff = image_diff / (noise_levels**2)
 
             if self.args.model_objective == 'score':
-                energy_gradient = self.model(noisy_batch)                        
+                energy_gradient = self.model(noisy_batch)  
 
             else:
                 energy = self.model(noisy_batch)
@@ -187,8 +190,16 @@ class Trainer(object):
                 loss = loss.mean(dim=0)
             else:
                 loss = (1/2.) * ((energy_gradient - image_diff)**2).sum(dim=-1).mean(dim=0)
-                
+
             self.writer.add_scalar(what + "_" + split + '-set/loss_batch', loss, step)
+
+            if self.args.penalty == 'contraction':
+                penalty = (energy_gradient**2).sum(dim=-1).mean()
+                loss += (self.args.plambda * penalty)              
+                
+                self.writer.add_scalar(what + "_" + split + '-set/penalty_batch', penalty, step)
+                self.writer.add_scalar(what + "_" + split + '-set/lossp_batch', loss, step)
+            
 
             if what == 'train':
                 self.optimizer.zero_grad()
@@ -317,6 +328,8 @@ class Trainer(object):
 
             if self.args.init_value == 'uniform':
                 curr_batch = torch.rand(batch.shape)
+                if self.args.min_max_normalize:
+                    curr_batch = (2 * curr_batch) - 1
 
             self.log.info("batch: " + str(i))
 
@@ -348,7 +361,7 @@ class Trainer(object):
                         curr_batch = curr_batch + step_size * energy_gradient + ((2*step_size)**0.5)*noise
 
                         if self.args.clamp:
-                            curr_batch = torch.clamp(curr_batch,0.0,1.0)
+                            curr_batch = torch.clamp(curr_batch, (-1.0 if self.args.min_max_normalize else 0.0), 1.0)
 
                         grad_norm = torch.norm(energy_gradient.view(energy_gradient.size(0),-1),dim=1).mean()
                         image_norm = torch.norm(curr_batch.view(curr_batch.size(0),-1),dim=1).mean()
@@ -418,7 +431,7 @@ class Trainer(object):
 
                     if self.args.clamp:
                         self.log.info(str(torch.unique(curr_batch)))
-                        curr_batch = torch.clamp(curr_batch,0.0,1.0)
+                        curr_batch = torch.clamp(curr_batch, (-1.0 if self.args.min_max_normalize else 0.0), 1.0)
                         self.log.info(str(torch.unique(curr_batch)))
 
             if self.args.denoise:
@@ -434,7 +447,7 @@ class Trainer(object):
 
             if self.args.clamp:
                 self.log.info(str(torch.unique(curr_batch)))
-                curr_batch = torch.clamp(curr_batch,0.0,1.0)
+                curr_batch = torch.clamp(curr_batch,(-1.0 if self.args.min_max_normalize else 0.0),1.0)
                 self.log.info(str(torch.unique(curr_batch)))
             all_samples.append(curr_batch.detach())
             # norm_batch = (curr_batch - np.min(curr_batch))
@@ -449,6 +462,9 @@ class Trainer(object):
 
         idx = torch.randperm(all_samples.size(0))[:self.args.save_nsamples]
         save_samples = np.transpose(all_samples[idx].numpy(),(0,2,3,1))
+        if self.args.min_max_normalize:
+            save_samples = (save_samples + 1)/2
+
         for i in range(len(save_samples)):
             nsample = save_samples[i]*255
             cv2.imwrite((self.args.isave_dir if not self.args.test_model else self.args.tsave_dir) + str(i) + ".jpg", nsample)
@@ -456,7 +472,8 @@ class Trainer(object):
         # print(torch.unique(all_samples))
         if self.args.renormalize:
             all_samples = (all_samples - torch.min(all_samples,dim=0)[0])/(torch.max(all_samples,dim=0)[0] - torch.min(all_samples,dim=0)[0])
-        all_samples = (all_samples * 2) - 1
+        if not self.args.min_max_normalize:
+            all_samples = (all_samples * 2) - 1
         mean_inception,std_inception,fid = inception_score(inception_model = self.inception.to(self.args.device), images=all_samples, cuda=True, fid_mean=self.fid_mean, fid_covar=self.fid_covar, mnist=(self.args.dataset=='mnist'))
         # print(mean_inception,std_inception,fid)
 

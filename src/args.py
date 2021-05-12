@@ -24,7 +24,10 @@ model_parser.add_argument("--model-dir", type=str, default="./models/", help="di
 model_parser.add_argument("--model-objective", type=str, default="score", choices=["score", "energy"], help="output of the model")
 model_parser.add_argument("--unet-depth", type=int, default=3, help="depth of unet model")
 model_parser.add_argument("--unet-block", type=str, default='conv_block', choices=['conv_block','res_block'], help="depth of unet model")
+model_parser.add_argument("--n-blocks", type=int, default=1, help="depth of unet model")
 model_parser.add_argument("--norm-type", type=str, default='batch', choices=['batch','instance','instance++'], help="depth of unet model")
+model_parser.add_argument("--act", type=str, default='relu', choices=['relu','elu'], help="activation used")
+model_parser.add_argument('--min-max-normalize', action='store_true', help='min max normalize images before input to model')
 #model_parser.add_argument('--reweight',type=int,default=1, help='reweight action diff and egrad using variance values')
 
 # training params
@@ -50,6 +53,8 @@ train_parser.add_argument('--distance-metric', default='l2', type=str, choices =
 train_parser.add_argument("--weight-decay", type=float, default=0, help="weight decay for training")
 train_parser.add_argument("--noise-std", type=str, default="10", help="Standard deviation of noise (Give multiple noise levels separated by commas)")
 train_parser.add_argument('--ema-mu', type=float, default=1, help='do exponential moving average to get a stable model for sampling')
+train_parser.add_argument('--penalty', type=str, default=None, help='add contractive / saturation penalty', choices=['contraction','saturation'])
+train_parser.add_argument('--plambda', type=float, default=1e-4, help='coefficient for penalty term')
 
 # Sampling options
 sampling_parser = parser.add_argument_group("sampling","sampling params")
