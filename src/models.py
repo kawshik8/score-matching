@@ -255,7 +255,8 @@ class UNet(nn.Module):
                     self.up_block = nn.ModuleList([up_block]).extend(self.up_block)
                     
                 else:
-                    self.up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear, norm_type=norm_type, block=block, act_type=act_type)]).extend(self.up_block)
+                    up_block = nn.ModuleList([Up(init_channels * 2, init_channels, bilinear=bilinear, norm_type=norm_type, block=block, act_type=act_type)])
+                    self.up_block = nn.ModuleList([up_block]).extend(self.up_block)
             
                 
                 init_channels = init_channels*2
@@ -268,7 +269,7 @@ class UNet(nn.Module):
         for i in range(self.depth+1):
             for j in range(self.n_blocks):
                 x = self.down_block[i][j](x)
-                print("down " + str(i) + "," + str(j) + ": ", x.shape)
+#                print("down " + str(i) + "," + str(j) + ": ", x.shape)
             skip_connections.append(x)
             
 
@@ -276,19 +277,19 @@ class UNet(nn.Module):
             
             
             if i==self.depth:
-                print("up-in " + str(i) + ": ", x.shape)
+ #               print("up-in " + str(i) + ": ", x.shape)
                 x = self.up_block[i](x)
-                print("up " + str(i) + ": ", x.shape)
+  #              print("up " + str(i) + ": ", x.shape)
                 
             else:
-                print("up-in " + str(i) + ": ", x.shape, skip_connections[self.depth-i-1].shape)
+   #             print("up-in " + str(i) + ": ", x.shape, skip_connections[self.depth-i-1].shape)
                 for j in range(self.n_blocks):
                     if j==0:
                         x = self.up_block[i][j](x,skip_connections[self.depth-i-1])
                     else:
                         x = self.up_block[i][j](x)
 
-                    print("up " + str(i) + "," + str(j) + ": ", x.shape)
+    #                print("up " + str(i) + "," + str(j) + ": ", x.shape)
 
         return x
 
@@ -349,11 +350,11 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         
-        print("input: ", x.shape)
+      #  print("input: ", x.shape)
         for i in range(self.depth+1):
             for j in range(self.n_blocks):
                 x = self.down_block[i][j](x)
-                print("down " + str(i) + "," + str(j) + ": ", x.shape)
+     #           print("down " + str(i) + "," + str(j) + ": ", x.shape)
 
         x = self.avg_pool(x).view(x.size(0),-1)
         x = self.dropout(x)

@@ -10,7 +10,7 @@
 
 #### Training!!
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --batch-size 128 --noise-std 1,0.01,10 --optimizer sgd_mom --lr 1e-4
-#bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --mfile multin-10-cifar-ema-b128-lr1e-4 --use-ema 1 --norm-type instance --data-dir ../data --lr 1e-4 --batch-size 128 --noise-std 1,0.01,10 --optimizer adam --scheduler reduce_plateau --dataset cifar10  --ema-mu 0.999 #--model-selection sampling #--use-ema 1 #one_cycle --cycle-pct 0.2 #--weight-decay 1e-3 #--model-selection sampling --step-lr 5e-6 --sampling-strategy ann_langevin --max-step 100
+#bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --mfile toomanyn-100-cifar-ema-elu-minmaxnorm --min-max-normalize --act elu --use-ema 1 --norm-type instance --data-dir ../data --lr 1e-3 --batch-size 32 --noise-std 50,0.01,100 --optimizer adam --scheduler reduce_plateau --dataset cifar10  --ema-mu 0.999 #--model-selection sampling --sampling-strategy ann_langevin --step-lr 1e-5 --max-step 100 #one_cycle --cycle-pct 0.2 #--weight-decay 1e-3 #--model-selection sampling --step-lr 5e-6 --sampling-strategy ann_langevin --max-step 100
 
 #### Sampling!!!
 ############# MNIST
@@ -41,10 +41,10 @@
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,50 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-cifar-lr_1e-3 --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-5 --lr-anneal 0.99 --max-step 20 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset cifar10
 
 ### too many 500 [50,0.01,500] : (1e-5, 5), (1e-5, 5, ema), (1e-5, 2), (1e-6, 25), (5e-6,5), (1e-6, 5), (5e-6, 10), (5e-6, 25), (5e-6, 2), 
-#bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 50,0.01,500 --sampling-batch-size 32 --load-mdir models/toomanyn-500-cifar-ema --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-6 --lr-anneal 0.99 --max-step 10 --reweight 1 --sampling-log-freq 9 --ntest 1000 --renormalize 0 --dataset cifar10
+bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --change-keys --test-model --noise-std 50,0.01,500 --sampling-batch-size 32 --load-mdir models/toomanyn-500-cifar-ema --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-5 --lr-anneal 0.99 --use-ema 1 --max-step 2 --reweight 1 --sampling-log-freq 99 --ntest 1000 --renormalize 0 --dataset cifar10
 
 ## too many 250:
-bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 50,0.01,250 --sampling-batch-size 32 --load-mdir models/toomanyn-250-cifar-ema --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 5e-7 --lr-anneal 0.99 --max-step 10 --reweight 1 --sampling-log-freq 9 --ntest 1000 --renormalize 0 --dataset cifar10
+#bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 50,0.01,250 --sampling-batch-size 32 --load-mdir models/toomanyn-250-cifar-ema --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-6 --lr-anneal 0.99 --use-ema 1 --max-step 1 --denoise --reweight 1 --sampling-log-freq 0 --ntest 1000 --renormalize 0 --dataset cifar10
 
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-cifar-lr_1e-3 --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-6 --lr-anneal 0.99 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset cifar10
 #bash /scratch/SP21ML/run-pytorch.bash python3 -u src/trainer.py --data-dir ../data --test-model --noise-std 1,0.01,10 --sampling-batch-size 32 --load-mdir models/multin-instance-rplat-cifar-lr_1e-3 --sampling-strategy ann_langevin --step-grad-choice pgrad --step-lr 1e-4 --lr-anneal 0.99 --max-step 100 --reweight 1 --sampling-log-freq 49 --ntest 1000 --renormalize 0 --dataset cifar10

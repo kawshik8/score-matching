@@ -13,6 +13,7 @@ from data import *
 from models import *
 from args import * 
 import cv2
+from collections import OrderedDict
 
 class Trainer(object):
     def __init__(self, args):
@@ -158,7 +159,7 @@ class Trainer(object):
             noise = torch.randn_like(batch).to(self.args.device) * noise_levels #torch.normal(mean=0, std=noise_level, size=batch.shape).to(self.args.device)
 
             if self.args.min_max_normalize:
-                noisy_batch = (2 * noisy_batch) - 1
+                batch = (2 * batch) - 1
 
             noisy_batch = batch + noise 
 
@@ -289,11 +290,18 @@ class Trainer(object):
 
     def testing(self):
 
-        if args.load_mdir is None:
+        if self.args.load_mdir is None:
             print("load model directory is None")
             exit(0)
         else:
-            self.model.load_state_dict(torch.load(args.load_mdir + "/" + args.ckpt_type + ("_ema" if self.args.use_ema else "") + ".ckpt"))
+            ckpt = torch.load(args.load_mdir + "/" + args.ckpt_type + ("_ema" if self.args.use_ema else "") + ".ckpt")
+            if self.args.change_keys:
+
+                keys = self.model.state_dict().keys()
+                values = ckpt.values()
+                ckpt = OrderedDict(zip(keys,values))
+
+            self.model.load_state_dict(ckpt)
 
         test_loss = self.train_test('eval', args.test_split, 0)
         self.log.info("Test Loss: " + str(test_loss))
