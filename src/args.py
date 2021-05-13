@@ -73,7 +73,7 @@ sampling_parser.add_argument('--step-grad-choice', type=str, default='pgrad', ch
 sampling_parser.add_argument('--lr-anneal-strategy', type=str, default='const', choices=['const','istep'], help='constantly anneal vs anneal wrt steps taken)')
 sampling_parser.add_argument('--lr-anneal', type=float, default=1.0, help='anneal constant to multiply at each step')
 sampling_parser.add_argument('--renormalize', type=int, default=1, help='renormalize to [0,1] after sampling?')
-sampling_parser.add_argument('--denoise', action='store_true', help='denoise after sampling')
+sampling_parser.add_argument('--denoise', type=int, default=0, choices=[0,1,2], help='no denoising vs denoising at the end vs denoising after every noise level')
 
 # Testing params
 test_parser = parser.add_argument_group("test","sampling params")
