@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils import *
 from data import *
 from models import *
+from NCSNv2 import *
 from args import * 
 import cv2
 from collections import OrderedDict
@@ -24,7 +25,15 @@ class Trainer(object):
         self.args = args
 
         if args.model_objective == 'score':
-            self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
+            if args.model_choice == 'custom':
+                self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
+            elif args.model_choice == 'ncsnv2':
+                self.model = NCSNv2(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act=self.args.act)
+            elif args.model_choice == 'ncsnv2':
+                self.model = NCSNv2Deeper(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act=self.args.act)
+            elif args.model_choice == 'ncsnv2':
+                self.model = NCSNv2Deepest(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act=self.args.act)
+
         elif args.model_objective == 'energy':
             self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
 

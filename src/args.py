@@ -20,6 +20,7 @@ data_parser.add_argument("--data-dir", type=str, default="../../data/", help="di
 # model params
 model_parser = parser.add_argument_group("model","params of model")
 model_parser.add_argument("--mfile", type=str, default=None, help="name of the file")
+model_parser.add_argument("--model-choice", type=str, default="custom", choices=["custom", "ncsnv2","ncsnv2_deeper","ncsnv2_deepest"], help="directory of the data files")
 model_parser.add_argument("--model-dir", type=str, default="./models/", help="directory of the data files")
 model_parser.add_argument("--model-objective", type=str, default="score", choices=["score", "energy"], help="output of the model")
 model_parser.add_argument("--unet-depth", type=int, default=3, help="depth of unet model")
