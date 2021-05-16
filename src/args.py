@@ -61,7 +61,7 @@ sampling_parser = parser.add_argument_group("sampling","sampling params")
 sampling_parser.add_argument('--clamp', action='store_true', help='clamp values after each step to [0,1]')
 sampling_parser.add_argument("--ntest", type=int, default=1000, help="no of samples to generate")
 sampling_parser.add_argument("--save-nsamples", type=int, default=100, help="store generated images")
-sampling_parser.add_argument("--sampling-log-freq", type=int, default=99, help="frequency of logging during sampling")
+sampling_parser.add_argument("--sampling-log-freq", type=int, default=None, help="frequency of logging during sampling")
 sampling_parser.add_argument("--sampling-batch-size", type=int, default=128, help="number of images per minibatch")
 sampling_parser.add_argument("--sampling-strategy", type=str, default='vanilla', choices=['vanilla','langevin','ann_langevin'], help="sampling strategy")
 sampling_parser.add_argument('--init-value', type=str, default='uniform', choices=['zeros','orig','random','uniform'],help='where to start during sampling')
@@ -128,7 +128,7 @@ def process_args():
 
     args.reweight = True if args.reweight==1 else False
     args.renormalize = True if args.renormalize ==1 else False
-
+    args.sampling_log_freq = (args.max_step-1 if args.sampling_log_freq is None else args.sampling_log_freq)
     args.device = torch.device(args.device)
 
     if not args.test_model:
