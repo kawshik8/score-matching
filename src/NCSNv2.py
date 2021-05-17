@@ -24,10 +24,10 @@ class NCSNv2(nn.Module):
         elif act_type == 'elu':
             self.act = act = nn.ELU()
 
-        self.begin_conv = nn.Conv2d(n_channels, ngf, 3, stride=1, padding=1)
+        self.begin_conv = nn.Conv2d(in_channels=n_channels, out_channels=ngf, kernel_size=3, stride=1, padding=1)
 
         self.normalizer = self.norm(ngf, self.num_classes)
-        self.end_conv = nn.Conv2d(ngf, n_channels, 3, stride=1, padding=1)
+        self.end_conv = nn.Conv2d(in_channels=ngf, out_channels=n_channels, kernel_size=3, stride=1, padding=1)
 
         self.res1 = nn.ModuleList([
             ResidualBlock(self.ngf, self.ngf, resample=None, act=act,
@@ -77,21 +77,36 @@ class NCSNv2(nn.Module):
 
     def forward(self, x):
 
+        print(self.begin_conv.weight.min(), self.begin_conv.weight.max())
+        print(x.shape, torch.min(x), torch.max(x))
+        print(torch.unique(x.detach()))
         output = self.begin_conv(x)
+        print("begin_conv: ",output.shape, torch.min(output), torch.max(output))
 
         layer1 = self._compute_cond_module(self.res1, output)
+        print(layer1.shape, torch.min(layer1), torch.max(layer1))
         layer2 = self._compute_cond_module(self.res2, layer1)
+        print(layer2.shape, torch.min(layer2), torch.max(layer2))
         layer3 = self._compute_cond_module(self.res3, layer2)
+        print(layer3.shape, torch.min(layer3), torch.max(layer3))
         layer4 = self._compute_cond_module(self.res4, layer3)
+        print(layer4.shape, torch.min(layer4), torch.max(layer4))
 
         ref1 = self.refine1([layer4], layer4.shape[2:])
+        print(ref1.shape, torch.min(ref1), torch.max(ref1))
         ref2 = self.refine2([layer3, ref1], layer3.shape[2:])
+        print(ref2.shape, torch.min(ref2), torch.max(ref2))
         ref3 = self.refine3([layer2, ref2], layer2.shape[2:])
+        print(ref3.shape, torch.min(ref3), torch.max(ref3))
         output = self.refine4([layer1, ref3], layer1.shape[2:])
+        print(output.shape, torch.min(output), torch.max(output))
 
         output = self.normalizer(output)
+        print(output.shape, torch.min(output), torch.max(output))
         output = self.act(output)
+        print(output.shape, torch.min(output), torch.max(output))
         output = self.end_conv(output)
+        print(output.shape, torch.min(output), torch.max(output))
 
         return output
 

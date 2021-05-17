@@ -28,11 +28,11 @@ class Trainer(object):
             if args.model_choice == 'custom':
                 self.model = UNet(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
             elif args.model_choice == 'ncsnv2':
-                self.model = NCSNv2(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act=self.args.act)
+                self.model = NCSNv2(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act_type=self.args.act)
             elif args.model_choice == 'ncsnv2':
-                self.model = NCSNv2Deeper(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act=self.args.act)
+                self.model = NCSNv2Deeper(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act_type=self.args.act)
             elif args.model_choice == 'ncsnv2':
-                self.model = NCSNv2Deepest(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act=self.args.act)
+                self.model = NCSNv2Deepest(n_channels=(1 if self.args.dataset=='mnist' else 3), norm_type=self.args.norm_type, act_type=self.args.act)
 
         elif args.model_objective == 'energy':
             self.model = Encoder(depth=self.args.unet_depth, norm_type=self.args.norm_type, block=self.args.unet_block, n_channels=(1 if self.args.dataset=='mnist' else 3), act_type = self.args.act)
@@ -178,7 +178,9 @@ class Trainer(object):
                 image_diff = image_diff / (noise_levels**2)
 
             if self.args.model_objective == 'score':
+                print(torch.min(noisy_batch),torch.max(noisy_batch))
                 energy_gradient = self.model(noisy_batch)  
+                print(torch.min(energy_gradient),torch.max(energy_gradient))
 
             else:
                 energy = self.model(noisy_batch)
